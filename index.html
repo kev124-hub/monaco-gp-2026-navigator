@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Monaco GP 2026 · Pedestrian Navigator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --red: #E8002D;
+      --bg: #0d0d14;
+      --panel: #13131c;
+      --card: #1a1a26;
+      --border: #252535;
+      --text: #f0f0f8;
+      --muted: #7777a0;
+      --green: #00C853;
+      --orange: #FF6D00;
+      --blue: #2979FF;
+      --sidebar-w: 300px;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    /* ─── Layout ─────────────────────────────── */
+    .app {
+      display: grid;
+      grid-template-rows: 56px 1fr;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* ─── Header ──────────────────────────────── */
+    .header {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 18px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      z-index: 20;
+    }
+
+    .f1-badge {
+      background: var(--red);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 7px;
+      border-radius: 3px;
+      letter-spacing: 1.5px;
+      flex-shrink: 0;
+    }
+
+    .header-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+
+    .header-subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+
+    .spacer { flex: 1; }
+
+    .monaco-time {
+      font-size: 12px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .track-status {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .track-status.open {
+      background: rgba(0, 200, 83, 0.12);
+      border: 1px solid rgba(0, 200, 83, 0.35);
+      color: #00C853;
+    }
+
+    .track-status.closed {
+      background: rgba(232, 0, 45, 0.12);
+      border: 1px solid rgba(232, 0, 45, 0.35);
+      color: #ff4444;
+    }
+
+    .track-status.weekend-over {
+      background: rgba(119, 119, 160, 0.12);
+      border: 1px solid rgba(119, 119, 160, 0.35);
+      color: var(--muted);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: blink 2s infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* ─── Sidebar ──────────────────────────────── */
+    .sidebar {
+      grid-column: 1;
+      grid-row: 2;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .sidebar::-webkit-scrollbar { width: 4px; }
+    .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .s-section {
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .s-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    /* Layer toggles */
+    .layer-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 6px 8px;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: background 0.12s;
+      margin-bottom: 2px;
+      user-select: none;
+    }
+
+    .layer-row:hover { background: var(--card); }
+    .layer-row.off { opacity: 0.4; }
+
+    .swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .layer-name {
+      font-size: 12px;
+      flex: 1;
+      line-height: 1.2;
+    }
+
+    .pill-toggle {
+      width: 28px;
+      height: 16px;
+      border-radius: 8px;
+      background: var(--border);
+      position: relative;
+      flex-shrink: 0;
+      transition: background 0.18s;
+    }
+
+    .pill-toggle::after {
+      content: '';
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #fff;
+      top: 3px;
+      left: 3px;
+      transition: transform 0.18s;
+    }
+
+    .layer-row:not(.off) .pill-toggle { background: var(--blue); }
+    .layer-row:not(.off) .pill-toggle::after { transform: translateX(12px); }
+
+    /* Scenario cards */
+    .sc-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      margin-bottom: 7px;
+    }
+
+    .sc-card:hover { border-color: #3a4a70; }
+    .sc-card.active { border-color: var(--blue); background: rgba(41,121,255,0.08); }
+
+    .sc-head {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 4px;
+    }
+
+    .sc-icon { font-size: 16px; line-height: 1; }
+
+    .sc-title {
+      font-size: 12px;
+      font-weight: 600;
+      flex: 1;
+      line-height: 1.3;
+    }
+
+    .sc-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+      flex-shrink: 0;
+    }
+
+    .badge-ticket { background: rgba(41,121,255,0.2); color: #6fa8ff; }
+    .badge-public { background: rgba(255,109,0,0.2); color: #ffaa55; }
+    .badge-access { background: rgba(0,200,83,0.2); color: #55dd88; }
+
+    .sc-route { font-size: 11px; color: var(--muted); }
+
+    /* Schedule button */
+    .sched-btn {
+      margin: 10px 14px;
+      padding: 8px 12px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+      text-align: left;
+    }
+
+    .sched-btn:hover { background: var(--card); color: var(--text); }
+
+    /* Info panel */
+    .info-panel {
+      padding: 14px;
+      flex: 1;
+      min-height: 80px;
+    }
+
+    .info-empty {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .info-name {
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 3px;
+      line-height: 1.35;
+    }
+
+    .info-layer-tag {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      margin-bottom: 9px;
+    }
+
+    .info-desc {
+      font-size: 12px;
+      color: #b0b0cc;
+      line-height: 1.6;
+    }
+
+    .directions-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      width: 100%;
+      justify-content: center;
+      transition: background 0.12s;
+    }
+
+    .directions-btn:hover { background: #1a67e8; }
+
+    /* Steps list */
+    .step-list { margin-top: 10px; }
+
+    .step-item {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 9px;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .step-num {
+      background: var(--blue);
+      color: #fff;
+      width: 17px;
+      height: 17px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .step-text { color: #c0c0d8; }
+
+    /* ─── Map ──────────────────────────────────── */
+    .map-wrap {
+      grid-column: 2;
+      grid-row: 2;
+      position: relative;
+    }
+
+    #map { width: 100%; height: 100%; }
+
+    /* ─── Schedule Modal ───────────────────────── */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s;
+    }
+
+    .overlay.show {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px 24px 24px;
+      width: 540px;
+      max-width: 92vw;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .modal-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    .modal-title { font-size: 15px; font-weight: 700; }
+
+    .close-btn {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: color 0.12s;
+    }
+
+    .close-btn:hover { color: var(--text); }
+
+    .sched-grid {
+      display: grid;
+      grid-template-columns: 110px 72px 72px 1fr;
+      gap: 0;
+    }
+
+    .sched-hdr-row {
+      display: contents;
+    }
+
+    .sched-hdr-row > span {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sched-data-row {
+      display: contents;
+    }
+
+    .sched-data-row > span {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+    }
+
+    .sched-data-row:last-of-type > span { border-bottom: none; }
+
+    .day-name { font-weight: 600; }
+    .t-closed { color: #ff5555; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .t-open { color: #00C853; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .sesh { color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+    .modal-note {
+      margin-top: 16px;
+      padding: 11px 14px;
+      background: rgba(255,109,0,0.08);
+      border: 1px solid rgba(255,109,0,0.25);
+      border-radius: 8px;
+      font-size: 11px;
+      color: #ffaa55;
+      line-height: 1.55;
+    }
+
+    /* ─── Mobile ───────────────────────────────── */
+    .mobile-toggle {
+      display: none;
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 8px 18px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      cursor: pointer;
+      font-family: inherit;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+
+    @media (max-width: 768px) {
+      .app {
+        grid-template-columns: 1fr;
+        grid-template-rows: 56px 1fr;
+      }
+
+      .sidebar {
+        grid-column: 1;
+        grid-row: 2;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 55vh;
+        border-right: none;
+        border-top: 1px solid var(--border);
+        border-radius: 16px 16px 0 0;
+        z-index: 25;
+        transform: translateY(100%);
+        transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+      }
+
+      .sidebar.open { transform: translateY(0); }
+
+      .map-wrap {
+        grid-column: 1;
+        grid-row: 2;
+      }
+
+      .mobile-toggle { display: block; }
+
+      .monaco-time { display: none; }
+      .header-title { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <!-- Header -->
+    <header class="header">
+      <span class="f1-badge">F1</span>
+      <div>
+        <div class="header-title">Monaco GP 2026</div>
+        <div class="header-subtitle">Pedestrian Navigator</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="monaco-time" id="monacoTime">—</div>
+      <div class="track-status weekend-over" id="trackStatus">
+        <div class="status-dot"></div>
+        <span id="statusText">Loading…</span>
+      </div>
+    </header>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+
+      <!-- Layer controls -->
+      <div class="s-section">
+        <div class="s-label">Map Layers</div>
+        <div id="layerControls"></div>
+      </div>
+
+      <!-- Scenarios -->
+      <div class="s-section">
+        <div class="s-label">Routing Scenarios</div>
+        <div id="scenarioCards"></div>
+      </div>
+
+      <!-- Schedule -->
+      <button class="sched-btn" onclick="openModal()">📅 &nbsp;View Full Race Schedule</button>
+
+      <!-- Info -->
+      <div class="info-panel">
+        <div class="s-label">Selected Feature</div>
+        <div id="infoContent">
+          <div class="info-empty">Click any map marker or line for details and walking directions.</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Map -->
+    <div class="map-wrap">
+      <div id="map"></div>
+    </div>
+  </div>
+
+  <!-- Mobile panel toggle -->
+  <button class="mobile-toggle" id="mobileToggle" onclick="toggleSidebar()">☰ &nbsp;Layers & Routes</button>
+
+  <!-- Schedule modal -->
+  <div class="overlay" id="modal" onclick="handleOverlayClick(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-hdr">
+        <div class="modal-title">🏁 2026 Monaco GP Track Schedule</div>
+        <button class="close-btn" onclick="closeModal()">✕ Close</button>
+      </div>
+
+      <div class="sched-grid">
+        <div class="sched-hdr-row">
+          <span>Date</span>
+          <span>Closes</span>
+          <span>Opens</span>
+          <span>Sessions</span>
+        </div>
+        <div class="sched-data-row">
+          <span class="day-name">Thu, Jun 4</span>
+          <span class="t-closed">07:00</span>
+          <span class="t-open">19:30</span>
+          <span class="sesh">F3 Practice · F2 Practice · Supercup Practice</span>
+        </div>
+        <div class="sched-data-row">
+          <span class="day-name">Fri, Jun 5</span>
+          <span class="t-closed">07:00</span>
+          <span class="t-open">21:00</span>
+          <span class="sesh">F3 Qualifying · F1 FP1 (13:30) · F2 Qualifying · F1 FP2 (17:00) · Supercup Qualifying</span>
+        </div>
+        <div class="sched-data-row">
+          <span class="day-name">Sat, Jun 6</span>
+          <span class="t-closed">06:30</span>
+          <span class="t-open">19:30</span>
+          <span class="sesh">F3 Sprint · F1 FP3 (12:30) · F2 Sprint · F1 Qualifying (16:00)</span>
+        </div>
+        <div class="sched-data-row">
+          <span class="day-name">Sun, Jun 7</span>
+          <span class="t-closed">05:00</span>
+          <span class="t-open">21:00</span>
+          <span class="sesh">F3 Feature (07:55) · F2 Feature (09:35) · Supercup (11:55) · F1 Grand Prix (15:00)</span>
+        </div>
+      </div>
+
+      <div class="modal-note">
+        ⚠️ Evening reopening times are approximate — subject to track clearance and FIA safety delegate approval.
+        Sunday post-race: expect 1–3 hour wait at Gare de Monaco from 17:00–20:00. Consider staying for dinner first.
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // ═══════════════════════════════════════════════════
+  // DATA
+  // ═══════════════════════════════════════════════════
+
+  const TRACK_SCHEDULE = {
+    '2026-06-04': { closed: '07:00', open: '19:30', ch:7, cm:0, oh:19, om:30 },
+    '2026-06-05': { closed: '07:00', open: '21:00', ch:7, cm:0, oh:21, om:0  },
+    '2026-06-06': { closed: '06:30', open: '19:30', ch:6, cm:30, oh:19, om:30 },
+    '2026-06-07': { closed: '05:00', open: '21:00', ch:5, cm:0, oh:21, om:0  },
+  };
+
+  const LAYERS = {
+    1: { label: 'Track Boundary',       color: '#DC143C', visible: true  },
+    2: { label: 'Restricted Zones',     color: '#FF6D00', visible: true  },
+    3: { label: 'Access Gates (1–10)',  color: '#2979FF', visible: true  },
+    4: { label: 'Elevators & Lifts',    color: '#43A047', visible: true  },
+    5: { label: 'Crossing Bridges',     color: '#AB47BC', visible: false },
+    6: { label: 'Traffic Changes',      color: '#FFC107', visible: false },
+    7: { label: 'Parking',             color: '#00BCD4', visible: true  },
+    8: { label: 'Transit Hubs',         color: '#3F51B5', visible: true  },
+    9: { label: 'Detour Routes',        color: '#00E676', visible: false },
+  };
+
+  const SCENARIOS = [
+    {
+      id: 'A',
+      icon: '🚉',
+      title: 'Train Station → Grandstand K',
+      route: 'Gare de Monaco → Gate 8 via Moneghetti',
+      badge: 'Ticket Holder', badgeClass: 'badge-ticket',
+      featureName: 'Scenario A Detour Route',
+      center: { lat: 43.738, lng: 7.419 }, zoom: 16,
+      steps: [
+        'Use the UPPER station exit into Moneghetti — do NOT exit through lower platform doors (leads directly to sealed track barrier)',
+        'Walk east along Boulevard de Belgique, bypassing the sealed Sainte-Dévote valley entirely',
+        'Descend via public elevator at Terrasses de la Coquille to reach Avenue de la Costa',
+        'Walk to Gate 8 (Rue Grimaldi) and present your Grandstand K ticket to clear security',
+        'Follow secure path behind pits to Grandstand K'
+      ]
+    },
+    {
+      id: 'B',
+      icon: '🅿️',
+      title: 'Parking des Salines → Rocher GA',
+      route: 'Free shuttle → Fontvieille → Gate 1',
+      badge: 'Accessible', badgeClass: 'badge-access',
+      featureName: 'Scenario B Detour Route',
+      center: { lat: 43.730, lng: 7.416 }, zoom: 15,
+      steps: [
+        'Do NOT walk via Galerie des Salines — footbridge has structural stairs (not accessible)',
+        'Board the FREE shuttle bus at Parking des Salines terminal (runs every 10 min, 08:00–20:00)',
+        'Ride 10 minutes to Avenue Albert II drop-off in Fontvieille (flat, accessible terminus)',
+        'Walk east on flat Avenue Albert II sidewalks toward the harbor',
+        'Use Fontvieille shopping center public elevators to descend to harbor level',
+        'Arrive at Gate 1 (Avenue de la Porte Neuve) — present Rocher GA ticket and climb secure path to hillside'
+      ]
+    },
+    {
+      id: 'C',
+      icon: '🎰',
+      title: 'Fontvieille → Casino Square',
+      route: 'Border circumvention via Beausoleil (no ticket)',
+      badge: 'No Ticket', badgeClass: 'badge-public',
+      featureName: 'Scenario C Detour Route',
+      center: { lat: 43.737, lng: 7.420 }, zoom: 15,
+      steps: [
+        'Climb west away from the harbor using Zoological Garden escalators toward the Exotic Garden district',
+        'Walk east along Boulevard du Jardin Exotique — this elevated road stays above and outside the security perimeter',
+        'Follow the road as it transitions into Boulevard Rainier III, maintaining elevation above the train station',
+        'Cross into French territory (Beausoleil) via Avenue du Général de Gaulle — this bypasses the sealed Monaco core',
+        'Walk east through Beausoleil municipal streets',
+        'Descend back into Monaco via public stairs at Avenue de Roqueville, arriving safely on the outer edge of Monte Carlo near Casino Square'
+      ]
+    }
+  ];
+
+  const GEOJSON = {
+    type: 'FeatureCollection',
+    features: [
+      // ── Layer 1: Track boundary ──────────────────
+      {
+        type: 'Feature',
+        properties: { name: 'Circuit de Monaco Track', layer: 'Layer 1: Hard Track Closures', layerNum: 1,
+          description: 'Full 3.337 km Grand Prix track loop. Completely impassable during track-closed hours. The circuit bisects Monte Carlo and La Condamine.' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [7.4212,43.7351],[7.4214,43.7369],[7.4217,43.7370],[7.4238,43.7373],[7.4257,43.7378],
+            [7.4272,43.7380],[7.4278,43.7385],[7.4276,43.7390],[7.4271,43.7394],[7.4287,43.7411],
+            [7.4291,43.7409],[7.4293,43.7404],[7.4297,43.7403],[7.4303,43.7399],[7.4302,43.7387],
+            [7.4285,43.7379],[7.4255,43.7372],[7.4237,43.7369],[7.4221,43.7367],[7.4218,43.7358],
+            [7.4219,43.7353],[7.4222,43.7351],[7.4224,43.7342],[7.4223,43.7339],[7.4226,43.7332],
+            [7.4231,43.7328],[7.4235,43.7326],[7.4232,43.7324],[7.4225,43.7324],[7.4224,43.7326],
+            [7.4221,43.7330],[7.4217,43.7336],[7.4214,43.7343],[7.4212,43.7351]
+          ]
+        }
+      },
+
+      // ── Layer 2: Restricted zones ─────────────────
+      {
+        type: 'Feature',
+        properties: { name: 'Quai des États-Unis Restricted Zone', layer: 'Layer 2: Prohibited Pedestrian Zones', layerNum: 2,
+          description: 'Harbor-side sealed zone. Public access strictly prohibited during track-closed hours. Ticket holders only beyond this boundary.' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[[7.4212,43.7351],[7.4214,43.7369],[7.4237,43.7369],[7.4255,43.7372],[7.4285,43.7379],[7.4221,43.7367],[7.4218,43.7358],[7.4212,43.7351]]]
+        }
+      },
+      {
+        type: 'Feature',
+        properties: { name: 'Darse Sud / South Dock Restricted Zone', layer: 'Layer 2: Prohibited Pedestrian Zones', layerNum: 2,
+          description: 'South harbor boardwalk. Access prohibited to non-ticket holders. Jules Soccal Jetty and Darse Sud basin are fully sealed.' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[[7.4214,43.7343],[7.4221,43.7330],[7.4224,43.7326],[7.4232,43.7324],[7.4225,43.7324],[7.4214,43.7343]]]
+        }
+      },
+
+      // ── Layer 3: Access gates ────────────────────
+      ...([
+        ['Gate 1 — Avenue de la Porte Neuve', 'Rocher General Admission hillside. Provides access to Secteur Rocher GA.', [7.4211,43.7311]],
+        ['Gate 2 — Avenue du Port',            'Primary gate for Grandstands N, O, P, V and the F1 Paddock Club. Includes tender shuttle access for VIP yacht guests.', [7.4215,43.7342]],
+        ['Gate 3 — Rue Saige',                 'Access to Grandstands T, X, and VIP Loges. Pedestrian crossing restricted nearby.', [7.4205,43.7351]],
+        ['Gate 4 — Rue Princesse Caroline',    'Primary gate for Grandstands X1 and X2 on the start/finish straight.', [7.4208,43.7360]],
+        ['Gate 5 — Square Gastaud',            'Services Grandstand L next to the Rainier III Nautical Stadium.', [7.4201,43.7365]],
+        ['Gate 6 — Rue Suffren Reymond',       'Dedicated entry for Grandstands H1 and H2.', [7.4192,43.7362]],
+        ['Gate 7 — Rue Princesse Antoinette',  'Services Grandstands E, H3, H4, K4, K5, K6, and premium Belvedere hospitality zone.', [7.4208,43.7392]],
+        ['Gate 8 — Rue Grimaldi',              'Access to Grandstand A (A1) at Sainte-Dévote, Grandstands K1–K3, and General Admission Area Z (Z1). Key arrival point from Moneghetti detour.', [7.4195,43.7378]],
+        ['Gate 9 — Place du Casino',           'Sole access node for Grandstand B overlooking Casino Square.', [7.4280,43.7391]],
+        ['Gate 10 — Portier',                  'Services Grandstand C between Portier corner and the Tunnel entrance.', [7.4295,43.7395]],
+      ].map(([name, description, coordinates]) => ({
+        type: 'Feature',
+        properties: { name, layer: 'Layer 3: Gated Checkpoints', layerNum: 3, description },
+        geometry: { type: 'Point', coordinates }
+      }))),
+
+      // ── Layer 4: Elevators & lifts ───────────────
+      ...([
+        ['Parking des Salines Subterranean Lift', 'Descends 45 m from level –15 to Avenue Pasteur near Monaco Cemetery. Connects to Fontvieille walking routes.', [7.4132,43.7351]],
+        ['Train Station Bypass Lift',             'Bypasses the main station corridor; avoids track-side sealed stairways.', [7.4182,43.7382]],
+        ['Tunnel des Pêcheurs Lift',              'Bypasses steep stairs; provides direct access to Oceanographic Museum plateau and Palace district.', [7.4259,43.7311]],
+        ['Yacht Club to Casino Square Lift',      'Public elevator linking the Yacht Club harbor level to the Casino Square plateau.', [7.4280,43.7380]],
+        ['Avenue Grande Bretagne Lift',           'Connects Avenue des Citronniers to Avenue Grande Bretagne (upper shopping district).', [7.4290,43.7395]],
+        ['Winston Churchill Square Lift',         'Connects Winston Churchill Square to the elevated Galerie shopping galleries.', [7.4300,43.7405]],
+        ['Grimaldi Forum Lift',                   'Step-free transit within the Grimaldi Forum cultural complex. Accessible to mobility-impaired visitors.', [7.4313,43.7438]],
+      ].map(([name, description, coordinates]) => ({
+        type: 'Feature',
+        properties: { name, layer: 'Layer 4: Vertical Transit Network', layerNum: 4, description },
+        geometry: { type: 'Point', coordinates }
+      }))),
+
+      // ── Layer 5: Crossing bridges ─────────────────
+      ...([
+        ['Sainte-Dévote Pedestrian Crossing Bridge', 'Temporary overpass over Turn 1. RESTRICTED during track-closed hours — ticket holders only.', [[7.4205,43.7390],[7.4211,43.7394]]],
+        ['Casino Square Pedestrian Overpass',         'Temporary crossing over Casino Square. Restricted to ticket holders during active sessions.', [[7.4278,43.7388],[7.4282,43.7392]]],
+        ['Portier Pedestrian Overpass',               'Temporary overpass near Portier corner. Restricted to ticket holders.', [[7.4295,43.7401],[7.4299,43.7404]]],
+      ].map(([name, description, coordinates]) => ({
+        type: 'Feature',
+        properties: { name, layer: 'Layer 5: Temporary Crossing Bridges', layerNum: 5, description },
+        geometry: { type: 'LineString', coordinates }
+      }))),
+
+      // ── Layer 6: Traffic modifications ───────────
+      ...([
+        ['Rue Grimaldi — Temporary Two-Way Flow',       'Heavy vehicular flow in both directions. Pedestrians must stick to marked sidewalks only.', [[7.4190,43.7327],[7.4195,43.7378]]],
+        ['Rue Princesse Florestine — Reversed Flow',    'Standard one-way flow reversed during GP hours. Watch for unexpected vehicle movements.', [[7.4195,43.7378],[7.4188,43.7370]]],
+        ['Rue Louis Notari — Temporary Two-Way Flow',   'Sidewalk capacity reduced by security installations. Use with caution.', [[7.4201,43.7365],[7.4208,43.7392]]],
+        ['Avenue du Port — Reversed Flow',              'Heavy congestion zone with reversed traffic. Pedestrian crossings tightly monitored by police.', [[7.4200,43.7327],[7.4210,43.7342]]],
+      ].map(([name, description, coordinates]) => ({
+        type: 'Feature',
+        properties: { name, layer: 'Layer 6: Modified Traffic Flows', layerNum: 6, description },
+        geometry: { type: 'LineString', coordinates }
+      }))),
+
+      // ── Layer 7: Parking ─────────────────────────
+      {
+        type: 'Feature',
+        properties: { name: 'Parking des Salines', layer: 'Layer 7: Integrated Parking', layerNum: 7,
+          description: '1,790 spaces (incl. 33 PRM, 100 motorcycle, 100 EV chargers). Grand Prix flat rate: €10/day if you enter 06:00–18:00. FREE shuttle to Fontvieille every 10 min, 08:00–20:00. Address: 99 Boulevard du Jardin Exotique.' },
+        geometry: { type: 'Point', coordinates: [7.4130,43.7353] }
+      },
+      {
+        type: 'Feature',
+        properties: { name: 'Stade Louis II Parking', layer: 'Layer 7: Integrated Parking', layerNum: 7,
+          description: 'Subterranean parking at AS Monaco stadium, Fontvieille. No shuttle provided — ~10 min walk to track. Higher tariffs than Salines. Address: 7 Avenue des Castelans.' },
+        geometry: { type: 'Point', coordinates: [7.4144,43.7279] }
+      },
+
+      // ── Layer 8: Transit hubs ─────────────────────
+      {
+        type: 'Feature',
+        properties: { name: 'Gare de Monaco-Monte-Carlo', layer: 'Layer 8: Pedestrian Hubs & Transit', layerNum: 8,
+          description: 'Primary hub for 80%+ of spectators. TER trains every 10–15 min. €5.90 single from Nice. ⚠️ CRITICAL: Use the UPPER exit (Moneghetti) — the lower exit leads directly to the sealed track barrier. Sunday 17:00–20:00: expect 1–3 hour queue just to reach the platform.' },
+        geometry: { type: 'Point', coordinates: [7.4198,43.7388] }
+      },
+      {
+        type: 'Feature',
+        properties: { name: 'Fontvieille Shuttle Drop-off (Avenue Albert II)', layer: 'Layer 8: Pedestrian Hubs & Transit', layerNum: 8,
+          description: 'Free shuttle terminus from Parking des Salines. Flat, step-free accessible route. Connects directly to public elevator network for Rocher GA access via Gate 1.' },
+        geometry: { type: 'Point', coordinates: [7.4185,43.7298] }
+      },
+
+      // ── Layer 9: Detour routes ────────────────────
+      {
+        type: 'Feature',
+        properties: { name: 'Scenario A Detour Route', layer: 'Layer 9: Pedestrian Detour Tracks', layerNum: 9,
+          description: 'Route A: Gare de Monaco upper exit → Moneghetti plateau → elevator descent → Gate 8. For Grandstand K ticket holders when the track is closed.' },
+        geometry: { type: 'LineString', coordinates: [[7.4198,43.7388],[7.4182,43.7382],[7.4190,43.7375],[7.4195,43.7378]] }
+      },
+      {
+        type: 'Feature',
+        properties: { name: 'Scenario B Detour Route', layer: 'Layer 9: Pedestrian Detour Tracks', layerNum: 9,
+          description: 'Route B: Parking des Salines → free shuttle → Fontvieille drop-off → flat walk → elevator → Gate 1. Fully step-free accessible path for Rocher GA ticket holders.' },
+        geometry: { type: 'LineString', coordinates: [[7.4130,43.7353],[7.4185,43.7298],[7.4190,43.7295],[7.4211,43.7311]] }
+      },
+      {
+        type: 'Feature',
+        properties: { name: 'Scenario C Detour Route', layer: 'Layer 9: Pedestrian Detour Tracks', layerNum: 9,
+          description: 'Route C: Port de Fontvieille → elevated Jardin Exotique boulevard → Beausoleil border circumvention → descend into Monte Carlo near Casino Square. For non-ticket holders.' },
+        geometry: { type: 'LineString', coordinates: [[7.4190,43.7295],[7.4150,43.7330],[7.4130,43.7350],[7.4180,43.7380],[7.4220,43.7420],[7.4270,43.7400],[7.4280,43.7395]] }
+      },
+    ]
+  };
+
+  // ═══════════════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════════════
+
+  let map, infoWindow;
+  let activeScenario = null;
+  const vis = Object.fromEntries(Object.entries(LAYERS).map(([k,v]) => [+k, v.visible]));
+
+  // ═══════════════════════════════════════════════════
+  // STATUS
+  // ═══════════════════════════════════════════════════
+
+  function getMonacoNow() {
+    return new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Monaco' }));
+  }
+
+  function updateStatus() {
+    const now = getMonacoNow();
+    const pad = n => String(n).padStart(2,'0');
+    const dateKey = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+    const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const cur = now.getHours() * 60 + now.getMinutes();
+
+    document.getElementById('monacoTime').textContent = `Monaco ${timeStr}`;
+
+    const statusEl = document.getElementById('trackStatus');
+    const textEl   = document.getElementById('statusText');
+    const sched    = TRACK_SCHEDULE[dateKey];
+
+    if (!sched) {
+      statusEl.className = 'track-status weekend-over';
+      textEl.textContent = 'Track Open';
+      return;
+    }
+
+    const closedAt = sched.ch * 60 + sched.cm;
+    const openAt   = sched.oh * 60 + sched.om;
+    const isClosed = cur >= closedAt && cur < openAt;
+
+    if (isClosed) {
+      statusEl.className = 'track-status closed';
+      textEl.textContent = `Track Closed · Opens ${sched.open}`;
+    } else if (cur >= openAt) {
+      statusEl.className = 'track-status open';
+      textEl.textContent = 'Track Open';
+    } else {
+      statusEl.className = 'track-status open';
+      textEl.textContent = `Track Open · Closes ${sched.closed}`;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════
+  // LAYER CONTROLS
+  // ═══════════════════════════════════════════════════
+
+  function buildLayers() {
+    document.getElementById('layerControls').innerHTML = Object.entries(LAYERS).map(([num, layer]) => `
+      <div class="layer-row ${layer.visible ? '' : 'off'}" id="lr-${num}" onclick="toggleLayer(${num})">
+        <div class="swatch" style="background:${layer.color}"></div>
+        <span class="layer-name">${layer.label}</span>
+        <div class="pill-toggle"></div>
+      </div>
+    `).join('');
+  }
+
+  function toggleLayer(num) {
+    vis[num] = !vis[num];
+    document.getElementById(`lr-${num}`).classList.toggle('off', !vis[num]);
+    if (!map) return;
+    map.data.forEach(f => {
+      if (f.getProperty('layerNum') === num) {
+        map.data.overrideStyle(f, { visible: vis[num] });
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // SCENARIO CARDS
+  // ═══════════════════════════════════════════════════
+
+  function buildScenarios() {
+    document.getElementById('scenarioCards').innerHTML = SCENARIOS.map(s => `
+      <div class="sc-card" id="sc-${s.id}" onclick="activateScenario('${s.id}')">
+        <div class="sc-head">
+          <span class="sc-icon">${s.icon}</span>
+          <span class="sc-title">${s.title}</span>
+          <span class="sc-badge ${s.badgeClass}">${s.badge}</span>
+        </div>
+        <div class="sc-route">${s.route}</div>
+      </div>
+    `).join('');
+  }
+
+  function activateScenario(id) {
+    if (activeScenario === id) {
+      activeScenario = null;
+      document.querySelectorAll('.sc-card').forEach(c => c.classList.remove('active'));
+      setInfo('<div class="info-empty">Click any map marker or line for details and walking directions.</div>');
+      return;
+    }
+
+    activeScenario = id;
+    document.querySelectorAll('.sc-card').forEach(c => c.classList.remove('active'));
+    document.getElementById(`sc-${id}`).classList.add('active');
+
+    // Show detour routes layer
+    if (!vis[9]) toggleLayer(9);
+
+    const s = SCENARIOS.find(x => x.id === id);
+    map.panTo({ lat: s.center.lat, lng: s.center.lng });
+    map.setZoom(s.zoom);
+
+    setInfo(`
+      <div class="info-name">${s.icon} ${s.title}</div>
+      <div class="info-layer-tag" style="color:#00E676">${s.route}</div>
+      <div class="step-list">
+        ${s.steps.map((step, i) => `
+          <div class="step-item">
+            <div class="step-num">${i+1}</div>
+            <div class="step-text">${step}</div>
+          </div>
+        `).join('')}
+      </div>
+    `);
+  }
+
+  // ═══════════════════════════════════════════════════
+  // INFO PANEL
+  // ═══════════════════════════════════════════════════
+
+  function setInfo(html) {
+    document.getElementById('infoContent').innerHTML = html;
+  }
+
+  function showFeatureInfo(feature, latLng) {
+    const name    = feature.getProperty('name');
+    const desc    = feature.getProperty('description');
+    const layer   = feature.getProperty('layer');
+    const layerNum = feature.getProperty('layerNum');
+    const color   = LAYERS[layerNum]?.color || '#fff';
+    const isPoint = feature.getGeometry().getType() === 'Point';
+
+    const directionsBtn = isPoint ? `
+      <button class="directions-btn" onclick="openNav(${latLng.lat()},${latLng.lng()},\`${name.replace(/`/g,'\\`')}\`)">
+        ↗ Walking Directions to Here
+      </button>
+    ` : '';
+
+    setInfo(`
+      <div class="info-name">${name}</div>
+      <div class="info-layer-tag" style="color:${color}">${layer}</div>
+      <div class="info-desc">${desc}</div>
+      ${directionsBtn}
+    `);
+  }
+
+  function openNav(lat, lng, name) {
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking`, '_blank');
+  }
+
+  // ═══════════════════════════════════════════════════
+  // MODAL
+  // ═══════════════════════════════════════════════════
+
+  function openModal()  { document.getElementById('modal').classList.add('show'); }
+  function closeModal() { document.getElementById('modal').classList.remove('show'); }
+  function handleOverlayClick(e) { if (e.target === e.currentTarget) closeModal(); }
+
+  // ═══════════════════════════════════════════════════
+  // MOBILE SIDEBAR TOGGLE
+  // ═══════════════════════════════════════════════════
+
+  let sidebarOpen = false;
+  function toggleSidebar() {
+    sidebarOpen = !sidebarOpen;
+    document.getElementById('sidebar').classList.toggle('open', sidebarOpen);
+    document.getElementById('mobileToggle').textContent = sidebarOpen ? '✕  Close Panel' : '☰  Layers & Routes';
+  }
+
+  // ═══════════════════════════════════════════════════
+  // MAP INIT (callback for Google Maps API)
+  // ═══════════════════════════════════════════════════
+
+  function initMap() {
+    map = new google.maps.Map(document.getElementById('map'), {
+      center: { lat: 43.7360, lng: 7.4246 },
+      zoom: 15,
+      mapTypeId: 'roadmap',
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+      zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_CENTER },
+      styles: [
+        { elementType: 'geometry',               stylers: [{ color: '#1a1a2e' }] },
+        { elementType: 'labels.text.stroke',      stylers: [{ color: '#1a1a2e' }] },
+        { elementType: 'labels.text.fill',        stylers: [{ color: '#8888aa' }] },
+        { featureType: 'road',      elementType: 'geometry',        stylers: [{ color: '#2a2a42' }] },
+        { featureType: 'road',      elementType: 'geometry.stroke', stylers: [{ color: '#181828' }] },
+        { featureType: 'road',      elementType: 'labels.text.fill',stylers: [{ color: '#8d8da0' }] },
+        { featureType: 'road.highway', elementType: 'geometry',     stylers: [{ color: '#363650' }] },
+        { featureType: 'water',     elementType: 'geometry',        stylers: [{ color: '#0a1e33' }] },
+        { featureType: 'water',     elementType: 'labels.text.fill',stylers: [{ color: '#3a6080' }] },
+        { featureType: 'poi',       stylers: [{ visibility: 'off' }] },
+        { featureType: 'transit',   stylers: [{ visibility: 'off' }] },
+        { featureType: 'administrative', elementType: 'geometry',   stylers: [{ color: '#252540' }] },
+        { featureType: 'landscape', elementType: 'geometry',        stylers: [{ color: '#1a1a2a' }] },
+      ]
+    });
+
+    // Load GeoJSON
+    map.data.addGeoJson(GEOJSON);
+
+    // Style by layer
+    map.data.setStyle(feature => {
+      const n = feature.getProperty('layerNum');
+      if (!vis[n]) return { visible: false };
+      switch (n) {
+        case 1: return { strokeColor: '#DC143C', strokeWeight: 4, strokeOpacity: 0.9, zIndex: 5 };
+        case 2: return { fillColor: '#FF6D00', fillOpacity: 0.22, strokeColor: '#FF8C00', strokeWeight: 1.5, strokeOpacity: 0.7, zIndex: 3 };
+        case 3: return { icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: '#2979FF', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2, scale: 8 }, zIndex: 10 };
+        case 4: return { icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: '#43A047', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2, scale: 6 }, zIndex: 9 };
+        case 5: return { strokeColor: '#AB47BC', strokeWeight: 3, strokeOpacity: 0.85, zIndex: 7 };
+        case 6: return { strokeColor: '#FFC107', strokeWeight: 2.5, strokeOpacity: 0.8, zIndex: 4 };
+        case 7: return { icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: '#00BCD4', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2, scale: 7 }, zIndex: 8 };
+        case 8: return { icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: '#3F51B5', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2.5, scale: 8 }, zIndex: 11 };
+        case 9: return { strokeColor: '#00E676', strokeWeight: 3.5, strokeOpacity: 0.95, zIndex: 6 };
+        default: return {};
+      }
+    });
+
+    infoWindow = new google.maps.InfoWindow();
+
+    // Click: show info in sidebar
+    map.data.addListener('click', evt => {
+      showFeatureInfo(evt.feature, evt.latLng);
+      // On mobile, open sidebar
+      if (window.innerWidth <= 768 && !sidebarOpen) toggleSidebar();
+    });
+
+    // Hover highlight
+    map.data.addListener('mouseover', evt => {
+      const geomType = evt.feature.getGeometry().getType();
+      if (geomType === 'LineString') {
+        map.data.overrideStyle(evt.feature, { strokeWeight: 6 });
+      } else if (geomType === 'Polygon') {
+        map.data.overrideStyle(evt.feature, { fillOpacity: 0.4 });
+      } else {
+        map.data.overrideStyle(evt.feature, { icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: '#fff', fillOpacity: 1, strokeColor: LAYERS[evt.feature.getProperty('layerNum')]?.color || '#fff', strokeWeight: 3, scale: 10 } });
+      }
+      map.getDiv().style.cursor = 'pointer';
+    });
+
+    map.data.addListener('mouseout', evt => {
+      map.data.revertStyle(evt.feature);
+      map.getDiv().style.cursor = '';
+    });
+
+    updateStatus();
+    setInterval(updateStatus, 30_000);
+  }
+
+  // ═══════════════════════════════════════════════════
+  // INIT
+  // ═══════════════════════════════════════════════════
+
+  buildLayers();
+  buildScenarios();
+  </script>
+
+  <script async
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC9hlu-zh7ZWLtiKZqbwDCW6XioXV9NXBY&callback=initMap">
+  </script>
+</body>
+</html>
