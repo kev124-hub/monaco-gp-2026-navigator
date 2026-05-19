@@ -143,7 +143,9 @@
 
     /* ── Scenario cards ── */
     /* ── Info panel ── */
-    .info-panel { padding:14px; min-height:0; }
+    .info-panel { padding:14px; flex-shrink:0; background:var(--panel); }
+    .info-clear { float:right; font-size:11px; color:var(--muted); cursor:pointer; background:none; border:none; padding:0; font-family:inherit; line-height:1; }
+    .info-clear:hover { color:var(--red); }
     .info-empty { color:var(--muted); font-size:12px; line-height:1.5; }
     .info-name { font-size:13px; font-weight:700; margin-bottom:3px; line-height:1.35; }
     .info-layer-tag { font-size:10px; font-weight:600; letter-spacing:.5px; margin-bottom:9px; }
@@ -795,6 +797,7 @@ function showPlaceInfo(place){
   const lat=place.geometry.location.lat(), lng=place.geometry.location.lng();
   _lastInfoLatLng=place.geometry.location; _lastInfoName=place.name;
   document.getElementById('infoContent').innerHTML=`
+    <button class="info-clear" onclick="clearInfoPanel()">✕ clear</button>
     <div class="info-name">${place.name}</div>
     <div class="info-layer-tag" style="color:#FF9800">Nearby Place</div>
     <div class="info-desc">${place.vicinity||''}</div>
@@ -803,8 +806,8 @@ function showPlaceInfo(place){
       <button class="dir-to-btn" style="flex:1;font-size:11px;padding:7px 6px;width:auto;margin-top:0" onclick="dirToFeature()">⚑ End Here</button>
       <button class="dir-to-btn" style="flex:0 0 auto;padding:7px 9px;background:var(--card);border:1px solid var(--border);color:var(--muted);font-size:10px;width:auto;margin-top:0" onclick="openNavTo(${lat},${lng})">Maps ↗</button>
     </div>`;
-  document.querySelector('.info-panel').scrollIntoView({behavior:'smooth',block:'nearest'});
   if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
+  scrollToPanel();
 }
 function clearPlaceMarkers(){
   openPlaceIW?.close(); openPlaceIW=null;
@@ -843,46 +846,63 @@ function initDirections(){
   loadCircuitRoute();
 }
 function loadCircuitRoute(){
-  // Trace the 3.337km circuit by road-snapping via Directions API (driving).
-  // Origin = pit straight entry; destination = pit straight exit.
-  // 12 via-waypoints force the route through every named corner in lap order.
-  directionsService.route({
-    origin:     new google.maps.LatLng(43.7347,7.4206),   // pit straight (west end)
-    destination:new google.maps.LatLng(43.7354,7.4213),   // pit straight (east end / T1 approach)
-    waypoints:[
-      {location:new google.maps.LatLng(43.7391,7.4201),stopover:false}, // Sainte-Dévote T1
-      {location:new google.maps.LatLng(43.7409,7.4255),stopover:false}, // Beau Rivage / Massenet
-      {location:new google.maps.LatLng(43.7402,7.4296),stopover:false}, // Casino Square T4
-      {location:new google.maps.LatLng(43.7381,7.4303),stopover:false}, // Mirabeau Haute T5
-      {location:new google.maps.LatLng(43.7371,7.4299),stopover:false}, // Grand Hôtel hairpin T6
-      {location:new google.maps.LatLng(43.7394,7.4303),stopover:false}, // Portier T7
-      {location:new google.maps.LatLng(43.7370,7.4278),stopover:false}, // Tunnel IM2S mid
-      {location:new google.maps.LatLng(43.7355,7.4263),stopover:false}, // Nouvelle Chicane T9
-      {location:new google.maps.LatLng(43.7349,7.4256),stopover:false}, // Tabac T11
-      {location:new google.maps.LatLng(43.7364,7.4272),stopover:false}, // Swimming Pool T12–16
-      {location:new google.maps.LatLng(43.7327,7.4228),stopover:false}, // Rascasse T17–18
-      {location:new google.maps.LatLng(43.7325,7.4216),stopover:false}, // Anthony Noghès T19–20
-    ],
-    travelMode:google.maps.TravelMode.DRIVING,
-    optimizeWaypoints:false,
-  },(result,status)=>{
-    if(status!=='OK') return;
-    // Decode full step-level path for maximum road-hugging detail
-    const path=[];
-    result.routes[0].legs.forEach(leg=>leg.steps.forEach(step=>step.path.forEach(p=>path.push(p))));
-    circuitPolyline=new google.maps.Polyline({
-      path,strokeColor:'#DC143C',strokeWeight:4,strokeOpacity:.9,zIndex:5,
-      map:vis[1]?map:null,
-    });
-    circuitPolyline.addListener('click',evt=>{
-      showFeatureInfo({properties:{name:'Circuit de Monaco Track',
-        layer:'Layer 1: Hard Track Closures',layerNum:1,
-        description:'Full 3.337 km Grand Prix track loop. Completely impassable during track-closed hours.'}},evt.latLng);
-      if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
-    });
-    circuitPolyline.addListener('mouseover',()=>{circuitPolyline.setOptions({strokeWeight:7});map.getDiv().style.cursor='pointer';});
-    circuitPolyline.addListener('mouseout', ()=>{circuitPolyline.setOptions({strokeWeight:4});map.getDiv().style.cursor='';});
+  // Hardcoded GPS coordinates tracing each named corner of the 3.337km circuit.
+  // [lng, lat] pairs — clockwise from the pit straight.
+  const coords=[
+    // Pit straight — Boulevard Albert 1er (north from Anthony Noghès to T1)
+    [7.4214,43.7347],[7.4212,43.7354],[7.4209,43.7362],[7.4205,43.7370],
+    [7.4202,43.7378],[7.4199,43.7386],
+    // T1 Sainte-Dévote → Beau Rivage climb (NE toward Casino)
+    [7.4202,43.7390],[7.4209,43.7394],[7.4218,43.7397],[7.4228,43.7400],
+    [7.4238,43.7403],[7.4248,43.7406],
+    // Massenet T2–T3 (crest of the hill)
+    [7.4257,43.7408],[7.4265,43.7407],[7.4272,43.7403],
+    // Casino Square T4
+    [7.4278,43.7399],[7.4281,43.7395],[7.4284,43.7392],
+    // Mirabeau Haute descent T5
+    [7.4289,43.7388],[7.4294,43.7383],[7.4298,43.7378],[7.4300,43.7374],
+    // Grand Hôtel Hairpin T6
+    [7.4299,43.7371],[7.4296,43.7369],[7.4293,43.7369],
+    [7.4292,43.7372],[7.4293,43.7376],
+    // Back up to Portier T7
+    [7.4295,43.7381],[7.4296,43.7387],[7.4297,43.7393],
+    // East along Avenue d'Ostende toward Fairmont Hotel
+    [7.4302,43.7392],[7.4308,43.7390],[7.4313,43.7387],
+    // Fairmont Hairpin (curves around Pointe Focinane tip)
+    [7.4316,43.7383],[7.4316,43.7378],[7.4314,43.7374],
+    [7.4309,43.7372],[7.4303,43.7372],
+    // Tunnel IM2S (heading west under the hill)
+    [7.4295,43.7373],[7.4284,43.7374],[7.4274,43.7373],
+    [7.4264,43.7370],[7.4255,43.7366],
+    // Tunnel exit → Nouvelle Chicane T9 (heading west)
+    [7.4249,43.7362],[7.4244,43.7358],[7.4238,43.7356],
+    [7.4232,43.7357],[7.4228,43.7360],
+    // Tabac T11 (left turn heading south)
+    [7.4224,43.7358],[7.4222,43.7354],[7.4223,43.7349],
+    // Swimming Pool complex T12–T16
+    [7.4225,43.7344],[7.4228,43.7340],[7.4233,43.7338],
+    [7.4238,43.7338],[7.4242,43.7341],[7.4242,43.7345],
+    [7.4238,43.7346],[7.4234,43.7343],
+    // Approach to La Rascasse (heading west/south)
+    [7.4230,43.7339],[7.4226,43.7334],[7.4223,43.7329],
+    // La Rascasse T17–T18 (hairpin)
+    [7.4222,43.7327],[7.4218,43.7327],[7.4216,43.7330],[7.4215,43.7334],
+    // Anthony Noghès T19–T20 → rejoin pit straight
+    [7.4214,43.7339],[7.4213,43.7343],[7.4214,43.7347],
+  ];
+  const path=coords.map(([lng,lat])=>({lat,lng}));
+  circuitPolyline=new google.maps.Polyline({
+    path,strokeColor:'#DC143C',strokeWeight:4,strokeOpacity:.9,zIndex:5,
+    map:vis[1]?map:null,
   });
+  circuitPolyline.addListener('click',evt=>{
+    showFeatureInfo({properties:{name:'Circuit de Monaco Track',
+      layer:'Layer 1: Hard Track Closures',layerNum:1,
+      description:'Full 3.337 km Grand Prix track loop. Completely impassable during track-closed hours.'}},evt.latLng);
+    if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
+  });
+  circuitPolyline.addListener('mouseover',()=>{circuitPolyline.setOptions({strokeWeight:7});map.getDiv().style.cursor='pointer';});
+  circuitPolyline.addListener('mouseout', ()=>{circuitPolyline.setOptions({strokeWeight:4});map.getDiv().style.cursor='';});
 }
 function requestDirections(){
   if(!originPlace?.geometry||!destPlace?.geometry){
@@ -979,11 +999,21 @@ function saveDirections(){
 // INFO PANEL
 // ═══════════════════════════════════════════════════════
 function setInfo(html){document.getElementById('infoContent').innerHTML=html;}
+function scrollToPanel(){
+  const sidebar=document.getElementById('sidebar');
+  const panel=document.querySelector('.info-panel');
+  sidebar.scrollTop=panel.offsetTop-8;
+}
+function clearInfoPanel(){
+  _lastInfoLatLng=null; _lastInfoName=null;
+  setInfo('<div class="info-empty">Tap any gate, parking, crossing, or viewing spot to set as Start or End for directions.</div>');
+}
 function showFeatureInfo(feature,latLng){
   const{name,description,layer,layerNum}=feature.properties;
   const color=LAYERS[layerNum]?.color||'#888';
   _lastInfoLatLng=latLng; _lastInfoName=name;
   setInfo(`
+    <button class="info-clear" onclick="clearInfoPanel()">✕ clear</button>
     <div class="info-name">${name}</div>
     <div class="info-layer-tag" style="color:${color}">${layer}</div>
     <div class="info-desc">${description}</div>
@@ -993,7 +1023,7 @@ function showFeatureInfo(feature,latLng){
       <button class="dir-to-btn" style="flex:0 0 auto;padding:7px 9px;background:var(--card);border:1px solid var(--border);color:var(--muted);font-size:10px;width:auto;margin-top:0" onclick="openNavTo(${latLng.lat()},${latLng.lng()})">Maps ↗</button>
     </div>`:''}
   `);
-  document.getElementById('sidebar').scrollTop=0;
+  scrollToPanel();
 }
 function setFeatureAsOrigin(){
   if(!_lastInfoLatLng) return;
