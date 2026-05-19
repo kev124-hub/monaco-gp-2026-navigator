@@ -1089,6 +1089,19 @@ function initMap(){
     showFeatureInfo(evt.feature,evt.latLng);
     if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
   });
+
+  // Intercept native Google Maps POI clicks (hotels, restaurants, etc. on the base map)
+  map.addListener('click',evt=>{
+    if(!evt.placeId) return; // ignore empty-space clicks
+    evt.stop(); // suppress Google's default info bubble
+    placesService.getDetails(
+      {placeId:evt.placeId, fields:['name','geometry','formatted_address','vicinity']},
+      (place,status)=>{
+        if(status!==google.maps.places.PlacesServiceStatus.OK) return;
+        showPlaceInfo(place);
+      }
+    );
+  });
   map.data.addListener('mouseover',evt=>{
     const t=evt.feature.getGeometry().getType();
     if(t==='LineString') map.data.overrideStyle(evt.feature,{strokeWeight:7});
