@@ -9,9 +9,9 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --red:#E8002D; --bg:#0d0d14; --panel:#13131c; --card:#1a1a26;
-      --border:#252535; --text:#f0f0f8; --muted:#7777a0;
-      --green:#00C853; --blue:#2979FF; --sidebar-w:300px;
+      --red:#E8002D; --bg:#f0f0f6; --panel:#ffffff; --card:#f4f4fa;
+      --border:#e0e0ee; --text:#1a1a2e; --muted:#888899;
+      --green:#00963c; --blue:#2060cc; --sidebar-w:300px;
     }
     html,body { height:100%; width:100%; overflow:hidden;
       font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color:var(--text); }
@@ -24,16 +24,18 @@
     .header { grid-column:1/-1; grid-row:1; display:flex; align-items:center;
       gap:14px; padding:0 18px; background:var(--panel);
       border-bottom:1px solid var(--border); z-index:20; }
-    .f1-badge { background:var(--red); color:#fff; font-size:10px; font-weight:800;
-      padding:3px 7px; border-radius:3px; letter-spacing:1.5px; flex-shrink:0; }
+    .f1-badge { background:transparent; padding:0; flex-shrink:0; display:flex; align-items:center; }
+    .f1-logo-img { height:30px; width:auto; display:block; }
+    .f1-badge-fallback { background:var(--red); color:#fff; font-size:10px; font-weight:800;
+      padding:3px 7px; border-radius:3px; letter-spacing:1.5px; }
     .header-title { font-size:14px; font-weight:700; letter-spacing:.3px; }
     .header-subtitle { font-size:11px; color:var(--muted); margin-top:1px; }
     .spacer { flex:1; }
     .monaco-time { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
     .track-status { display:flex; align-items:center; gap:7px; padding:5px 12px;
       border-radius:20px; font-size:12px; font-weight:600; white-space:nowrap; flex-shrink:0; }
-    .track-status.open   { background:rgba(0,200,83,.12); border:1px solid rgba(0,200,83,.35); color:#00C853; }
-    .track-status.closed { background:rgba(232,0,45,.12); border:1px solid rgba(232,0,45,.35); color:#ff4444; }
+    .track-status.open   { background:rgba(0,150,60,.1); border:1px solid rgba(0,150,60,.35); color:#00763c; }
+    .track-status.closed { background:rgba(232,0,45,.1); border:1px solid rgba(232,0,45,.35); color:#cc0000; }
     .track-status.weekend-over { background:rgba(119,119,160,.12); border:1px solid rgba(119,119,160,.35); color:var(--muted); }
     .status-dot { width:7px; height:7px; border-radius:50%; background:currentColor;
       animation:blink 2s infinite; flex-shrink:0; }
@@ -53,7 +55,7 @@
     .s-section-hdr { display:flex; align-items:center; justify-content:space-between;
       padding:12px 14px 8px; cursor:pointer; user-select:none;
       transition:background .12s; }
-    .s-section-hdr:hover { background:rgba(255,255,255,.03); }
+    .s-section-hdr:hover { background:rgba(0,0,0,.04); }
     .s-section-hdr.no-toggle { cursor:default; padding-bottom:10px; }
     .s-section-hdr.no-toggle:hover { background:none; }
     .s-label { font-size:9px; font-weight:700; letter-spacing:1.8px;
@@ -92,19 +94,19 @@
     .dir-clear-btn:hover { color:var(--text); }
     .route-banner { margin-top:10px; padding:9px 11px; border-radius:8px;
       font-size:11px; line-height:1.55; font-weight:500; display:none; }
-    .route-banner.detour { background:rgba(232,0,45,.1); border:1px solid rgba(232,0,45,.3); color:#ff7070; }
-    .route-banner.normal { background:rgba(0,200,83,.1); border:1px solid rgba(0,200,83,.3); color:#55dd88; }
-    .route-banner.warning { background:rgba(255,193,7,.1); border:1px solid rgba(255,193,7,.3); color:#ffd740; }
+    .route-banner.detour { background:rgba(232,0,45,.08); border:1px solid rgba(232,0,45,.3); color:#b00010; }
+    .route-banner.normal { background:rgba(0,150,60,.08); border:1px solid rgba(0,150,60,.3); color:#006828; }
+    .route-banner.warning { background:rgba(180,120,0,.08); border:1px solid rgba(180,120,0,.3); color:#7a5500; }
     .dir-summary { margin-top:10px; padding:9px 11px; background:var(--card);
       border:1px solid var(--border); border-radius:8px; display:none; }
     .dir-summary-row { display:flex; gap:20px; margin-bottom:8px; }
     .dir-stat { font-size:14px; font-weight:700; }
     .dir-stat-label { font-size:10px; color:var(--muted); margin-top:1px; }
     .dir-open-maps { display:flex; align-items:center; justify-content:center; gap:6px;
-      margin-top:8px; padding:7px; background:rgba(41,121,255,.15);
-      border:1px solid rgba(41,121,255,.3); border-radius:7px; font-size:11px;
-      font-weight:600; color:#6fa8ff; cursor:pointer; transition:background .12s; }
-    .dir-open-maps:hover { background:rgba(41,121,255,.25); }
+      margin-top:8px; padding:7px; background:rgba(32,96,204,.1);
+      border:1px solid rgba(32,96,204,.25); border-radius:7px; font-size:11px;
+      font-weight:600; color:#1a50b8; cursor:pointer; transition:background .12s; }
+    .dir-open-maps:hover { background:rgba(32,96,204,.18); }
     .dir-steps { margin-top:10px; }
     .dir-step { display:flex; gap:8px; padding:6px 0;
       border-bottom:1px solid var(--border); font-size:11px; line-height:1.5; }
@@ -112,7 +114,7 @@
     .dir-step-num { background:var(--card); border:1px solid var(--border); color:var(--muted);
       width:18px; height:18px; border-radius:50%; display:flex; align-items:center;
       justify-content:center; font-size:9px; font-weight:700; flex-shrink:0; margin-top:1px; }
-    .dir-step-text { color:#c0c0d8; flex:1; }
+    .dir-step-text { color:#444460; flex:1; }
     .dir-step-dist { color:var(--muted); font-size:10px; flex-shrink:0; padding-top:2px; }
 
     /* ── Layer toggles ── */
@@ -148,23 +150,23 @@
     .sc-title { font-size:12px; font-weight:600; flex:1; line-height:1.3; }
     .sc-badge { font-size:9px; font-weight:700; padding:2px 6px; border-radius:4px;
       letter-spacing:.5px; flex-shrink:0; }
-    .badge-ticket { background:rgba(41,121,255,.2); color:#6fa8ff; }
-    .badge-public { background:rgba(255,109,0,.2); color:#ffaa55; }
-    .badge-access { background:rgba(0,200,83,.2); color:#55dd88; }
+    .badge-ticket { background:rgba(32,96,204,.15); color:#1a50b8; }
+    .badge-public { background:rgba(200,80,0,.12); color:#a04000; }
+    .badge-access { background:rgba(0,130,50,.12); color:#006828; }
     .sc-route { font-size:11px; color:var(--muted); }
     .step-list { margin-top:10px; }
     .step-item { display:flex; gap:8px; margin-bottom:9px; font-size:11px; line-height:1.5; }
     .step-num { background:var(--blue); color:#fff; width:17px; height:17px;
       border-radius:50%; display:flex; align-items:center; justify-content:center;
       font-size:9px; font-weight:700; flex-shrink:0; margin-top:1px; }
-    .step-text { color:#c0c0d8; }
+    .step-text { color:#444460; }
 
     /* ── Info panel ── */
     .info-panel { padding:14px; flex:1; min-height:80px; }
     .info-empty { color:var(--muted); font-size:12px; line-height:1.5; }
     .info-name { font-size:13px; font-weight:700; margin-bottom:3px; line-height:1.35; }
     .info-layer-tag { font-size:10px; font-weight:600; letter-spacing:.5px; margin-bottom:9px; }
-    .info-desc { font-size:12px; color:#b0b0cc; line-height:1.6; }
+    .info-desc { font-size:12px; color:#444460; line-height:1.6; }
     .dir-to-btn { display:flex; align-items:center; gap:6px; margin-top:10px;
       padding:7px 12px; background:var(--blue); color:#fff; border:none;
       border-radius:8px; font-size:12px; font-weight:600; font-family:inherit;
@@ -216,12 +218,34 @@
       font-size:12px; display:flex; align-items:center; }
     .sched-data-row:last-of-type>span { border-bottom:none; }
     .day-name { font-weight:600; }
-    .t-closed { color:#ff5555; font-weight:700; font-variant-numeric:tabular-nums; }
-    .t-open   { color:#00C853; font-weight:700; font-variant-numeric:tabular-nums; }
+    .t-closed { color:#cc0000; font-weight:700; font-variant-numeric:tabular-nums; }
+    .t-open   { color:#00763c; font-weight:700; font-variant-numeric:tabular-nums; }
     .sesh { color:var(--muted); font-size:11px; line-height:1.45; }
-    .modal-note { margin-top:16px; padding:11px 14px; background:rgba(255,109,0,.08);
-      border:1px solid rgba(255,109,0,.25); border-radius:8px; font-size:11px;
-      color:#ffaa55; line-height:1.55; }
+    .modal-note { margin-top:16px; padding:11px 14px; background:rgba(180,80,0,.07);
+      border:1px solid rgba(180,80,0,.25); border-radius:8px; font-size:11px;
+      color:#a04000; line-height:1.55; }
+    /* ── Simulate row ── */
+    .simulate-row { display:flex; align-items:center; justify-content:space-between;
+      padding:8px 10px; background:rgba(232,0,45,.06); border:1px solid rgba(232,0,45,.18);
+      border-radius:8px; margin-bottom:7px; cursor:pointer; user-select:none;
+      transition:background .15s,border-color .15s; }
+    .simulate-row.active { background:rgba(232,0,45,.14); border-color:rgba(232,0,45,.5); }
+    .simulate-label { font-size:11px; font-weight:600; color:var(--muted); }
+    .simulate-row.active .simulate-label { color:var(--red); }
+    .simulate-pill { width:28px; height:16px; border-radius:8px; background:var(--border);
+      position:relative; flex-shrink:0; transition:background .18s; }
+    .simulate-pill::after { content:''; position:absolute; width:10px; height:10px;
+      border-radius:50%; background:#fff; top:3px; left:3px; transition:transform .18s; }
+    .simulate-row.active .simulate-pill { background:var(--red); }
+    .simulate-row.active .simulate-pill::after { transform:translateX(12px); }
+    /* ── Save directions button ── */
+    .dir-save-btn { display:none; align-items:center; justify-content:center; gap:6px;
+      margin-top:6px; padding:7px; background:rgba(0,150,60,.08);
+      border:1px solid rgba(0,150,60,.25); border-radius:7px; font-size:11px;
+      font-weight:600; color:#006828; cursor:pointer; transition:background .12s; width:100%; }
+    .dir-save-btn:hover { background:rgba(0,150,60,.15); }
+    /* ── Place cat active on light ── */
+    .place-cat-btn.active { background:rgba(200,100,0,.12); border-color:rgba(200,100,0,.4); color:#a04000; }
 
     /* ── Places autocomplete dropdown ── */
     .pac-container { background:var(--panel)!important; border:1px solid var(--border)!important;
@@ -266,7 +290,10 @@
 <div class="app">
 
   <header class="header">
-    <span class="f1-badge">F1</span>
+    <span class="f1-badge">
+      <img src="/f1-logo.png" alt="F1" class="f1-logo-img"
+        onerror="this.outerHTML='<span class=&quot;f1-badge-fallback&quot;>F1</span>'">
+    </span>
     <div><div class="header-title">Monaco GP 2026</div>
       <div class="header-subtitle">Pedestrian Navigator</div></div>
     <div class="spacer"></div>
@@ -291,6 +318,10 @@
           <div class="dir-dot dest-dot"></div>
           <input id="dest-input" type="text" class="dir-input" placeholder="To: restaurant, gate, café…">
         </div>
+        <div class="simulate-row" id="simulateRow" onclick="toggleSimulate()">
+          <span class="simulate-label" id="simulateLabel">⏰ Simulate Race Hours (pre-plan route)</span>
+          <div class="simulate-pill" id="simulatePill"></div>
+        </div>
         <button class="dir-go-btn" onclick="requestDirections()">🚶 Get Walking Directions</button>
         <button class="dir-clear-btn" id="clearBtn" onclick="clearDirections()">✕ Clear Route</button>
         <div class="route-banner" id="routeBanner"></div>
@@ -300,8 +331,17 @@
             <div><div class="dir-stat" id="dirDistance">—</div><div class="dir-stat-label">Distance</div></div>
           </div>
           <div class="dir-open-maps" onclick="openExternalDirections()">↗ Open in Google Maps</div>
+          <button class="dir-save-btn" id="dirSaveBtn" onclick="saveDirections()">💾 Save / Print Directions</button>
         </div>
         <div class="dir-steps" id="dirSteps"></div>
+      </div>
+    </div>
+
+    <!-- Selected Feature (above layers for quick access) -->
+    <div class="info-panel" style="border-bottom:1px solid var(--border)">
+      <div class="s-label" style="margin-bottom:10px">Selected Feature</div>
+      <div id="infoContent">
+        <div class="info-empty">Tap any gate, parking, crossing, or viewing spot to set as Start or End for directions.</div>
       </div>
     </div>
 
@@ -330,8 +370,8 @@
       <div class="s-section-hdr no-toggle"><div class="s-label">Map Style</div></div>
       <div class="s-body-inner" style="padding-top:4px;padding-bottom:10px">
         <div style="display:flex;gap:4px;flex-wrap:wrap">
-          <button class="theme-btn active" data-theme="dark"      onclick="setTheme('dark')">🌙 Dark</button>
-          <button class="theme-btn"        data-theme="light"     onclick="setTheme('light')">☀️ Light</button>
+          <button class="theme-btn"        data-theme="dark"      onclick="setTheme('dark')">🌙 Dark</button>
+          <button class="theme-btn active" data-theme="light"     onclick="setTheme('light')">☀️ Light</button>
           <button class="theme-btn"        data-theme="satellite" onclick="setTheme('satellite')">🛰 Satellite</button>
           <button class="theme-btn"        data-theme="hybrid"    onclick="setTheme('hybrid')">🗺 Hybrid</button>
         </div>
@@ -340,16 +380,8 @@
 
     <button class="sched-btn" onclick="openModal()">📅 &nbsp;View Full Race Schedule</button>
 
-    <!-- Info panel -->
-    <div class="info-panel">
-      <div class="s-label" style="margin-bottom:10px">Selected Feature</div>
-      <div id="infoContent">
-        <div class="info-empty">Click any map feature for details. Use Nearby Places layer to browse hotels, restaurants, and cafes for directions.</div>
-      </div>
-    </div>
-
-    <!-- Example Routes (collapsible, bottom) -->
-    <div class="s-section" style="border-top:1px solid var(--border);margin-top:auto">
+    <!-- Example Routes (collapsible) -->
+    <div class="s-section">
       <div class="s-section-hdr" onclick="toggleSection('routes')">
         <div class="s-label">Example Routes</div>
         <span class="chevron" id="chev-routes">▼</span>
@@ -367,8 +399,8 @@
     <div id="map"></div>
     <!-- Floating map type control -->
     <div class="map-type-ctrl">
-      <button class="theme-btn active" data-theme="dark"      onclick="setTheme('dark')">🌙 Dark</button>
-      <button class="theme-btn"        data-theme="light"     onclick="setTheme('light')">☀️ Light</button>
+      <button class="theme-btn"        data-theme="dark"      onclick="setTheme('dark')">🌙 Dark</button>
+      <button class="theme-btn active" data-theme="light"     onclick="setTheme('light')">☀️ Light</button>
       <button class="theme-btn"        data-theme="satellite" onclick="setTheme('satellite')">🛰 Satellite</button>
       <button class="theme-btn"        data-theme="hybrid"    onclick="setTheme('hybrid')">🗺 Hybrid</button>
     </div>
@@ -662,7 +694,8 @@ function getDetour(oLat,oLng,dLat,dLng){
 let map, directionsService, directionsRenderer, placesService;
 let originAC, destAC, originPlace=null, destPlace=null;
 let lastRouteResult=null;
-let activeScenario=null, sidebarOpen=false, currentTheme='dark';
+let activeScenario=null, sidebarOpen=false, currentTheme='light';
+let simulateRaceClosed=false;
 const vis=Object.fromEntries(Object.entries(LAYERS).map(([k,v])=>[+k,v.visible]));
 const labeledMarkers=[]; // {marker, layerNum, feature}
 let placeMarkersList=[], activePlaceCat='lodging';
@@ -674,17 +707,26 @@ let _lastInfoLatLng=null, _lastInfoName=null;
 // ═══════════════════════════════════════════════════════
 function getMonacoNow(){ return new Date(new Date().toLocaleString('en-US',{timeZone:'Europe/Monaco'})); }
 function getTrackStatus(){
+  if(simulateRaceClosed) return{closed:true,sched:TRACK_SCHEDULE['2026-06-07'],simulated:true};
   const now=getMonacoNow(), pad=n=>String(n).padStart(2,'0');
   const key=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
   const cur=now.getHours()*60+now.getMinutes(), sched=TRACK_SCHEDULE[key];
   if(!sched) return {closed:false,sched:null};
   return{closed:cur>=sched.ch*60+sched.cm&&cur<sched.oh*60+sched.om,sched};
 }
+function toggleSimulate(){
+  simulateRaceClosed=!simulateRaceClosed;
+  document.getElementById('simulateRow').classList.toggle('active',simulateRaceClosed);
+  document.getElementById('simulateLabel').textContent=simulateRaceClosed
+    ?'⏰ Simulating Race Hours (tap to exit)':'⏰ Simulate Race Hours (pre-plan route)';
+  updateStatus();
+}
 function updateStatus(){
   const now=getMonacoNow(), pad=n=>String(n).padStart(2,'0');
   document.getElementById('monacoTime').textContent=`Monaco ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  const {closed,sched}=getTrackStatus();
+  const {closed,sched,simulated}=getTrackStatus();
   const el=document.getElementById('trackStatus'), txt=document.getElementById('statusText');
+  if(simulated){el.className='track-status closed';txt.textContent='⏰ Simulating Race Closed';return;}
   if(!sched){
     const d=now.getFullYear()*10000+(now.getMonth()+1)*100+now.getDate();
     if(d<20260604){el.className='track-status open';txt.textContent='Streets Open · Race Jun 4–7';}
@@ -806,14 +848,14 @@ function createPlaceMarker(place){
     zIndex:50,
   });
   const iw=new google.maps.InfoWindow({
-    content:`<div style="background:#1a1a26;color:#f0f0f8;padding:12px;border-radius:8px;min-width:170px;font-family:Inter,sans-serif">
-      <div style="font-weight:700;font-size:13px;margin-bottom:4px">${place.name}</div>
-      <div style="font-size:11px;color:#7777a0;margin-bottom:10px">${place.vicinity||''}</div>
+    content:`<div style="background:#fff;color:#1a1a2e;padding:12px;border-radius:8px;min-width:180px;font-family:Inter,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.12)">
+      <div style="font-weight:700;font-size:13px;margin-bottom:3px">${place.name}</div>
+      <div style="font-size:11px;color:#888;margin-bottom:10px">${place.vicinity||''}</div>
       <div style="display:flex;gap:6px">
         <button onclick="setDirPoint('origin','${place.name.replace(/'/g,"\\'")}',${place.geometry.location.lat()},${place.geometry.location.lng()})"
-          style="flex:1;padding:6px;background:#00C853;border:none;border-radius:6px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">▶ Start</button>
+          style="flex:1;padding:7px;background:#00963c;border:none;border-radius:6px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">▶ Start</button>
         <button onclick="setDirPoint('dest','${place.name.replace(/'/g,"\\'")}',${place.geometry.location.lat()},${place.geometry.location.lng()})"
-          style="flex:1;padding:6px;background:#2979FF;border:none;border-radius:6px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⚑ End</button>
+          style="flex:1;padding:7px;background:#2060cc;border:none;border-radius:6px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⚑ End</button>
       </div>
     </div>`,
   });
@@ -864,7 +906,7 @@ function requestDirections(){
     showBanner('warning','⚠️ Select both a start and end location from the dropdown.');return;
   }
   const oLL=originPlace.geometry.location, dLL=destPlace.geometry.location;
-  const{closed}=getTrackStatus();
+  const{closed,simulated}=getTrackStatus();
   let waypoints=[],detourKey=null;
   if(closed){
     const r=getDetour(oLL.lat(),oLL.lng(),dLL.lat(),dLL.lng());
@@ -880,9 +922,11 @@ function requestDirections(){
     lastRouteResult=result;
     if(closed&&waypoints.length>0){
       const label=detourKey?(CORRIDOR_LABELS[detourKey]||''):'';
-      showBanner('detour',`🔴 Track Closed · Route detoured around restricted areas${label?' · '+label:''}`);
+      const prefix=simulated?'⏰ Simulated Race Hours':'🔴 Track Closed';
+      showBanner('detour',`${prefix} · Route detoured around restricted areas${label?' · '+label:''}`);
     } else if(closed){
-      showBanner('normal','🟢 Track closed but both locations are in the same zone — no detour needed.');
+      const prefix=simulated?'⏰ Simulated':'🟢';
+      showBanner('normal',`${prefix} Track closed but both locations are in the same zone — no detour needed.`);
     } else {
       showBanner('normal','🟢 Track open · Showing standard walking route.');
     }
@@ -891,6 +935,7 @@ function requestDirections(){
     document.getElementById('dirDistance').textContent=leg.distance.text;
     document.getElementById('dirSummary').style.display='block';
     document.getElementById('clearBtn').style.display='block';
+    document.getElementById('dirSaveBtn').style.display='flex';
     document.getElementById('dirSteps').innerHTML=leg.steps.map((s,i)=>`
       <div class="dir-step">
         <div class="dir-step-num">${i+1}</div>
@@ -910,6 +955,7 @@ function clearDirections(){
   document.getElementById('dirSummary').style.display='none';
   document.getElementById('dirSteps').innerHTML='';
   document.getElementById('clearBtn').style.display='none';
+  document.getElementById('dirSaveBtn').style.display='none';
   document.getElementById('origin-input').value='';
   document.getElementById('dest-input').value='';
   originPlace=null; destPlace=null; lastRouteResult=null;
@@ -919,6 +965,32 @@ function openExternalDirections(){
   const o=originPlace.geometry.location, d=destPlace.geometry.location;
   window.open(`https://www.google.com/maps/dir/?api=1&origin=${o.lat()},${o.lng()}&destination=${d.lat()},${d.lng()}&travelmode=walking`,'_blank');
 }
+function saveDirections(){
+  if(!lastRouteResult) return;
+  const leg=lastRouteResult.routes[0].legs[0];
+  const banner=document.getElementById('routeBanner').textContent||'';
+  const steps=leg.steps.map((s,i)=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#888;font-weight:700;white-space:nowrap">${i+1}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${s.instructions.replace(/<[^>]*>/g,' ').trim()}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#888;white-space:nowrap">${s.distance.text}</td></tr>`).join('');
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Monaco GP 2026 — Walking Directions</title>
+    <style>body{font-family:Inter,-apple-system,sans-serif;max-width:640px;margin:32px auto;padding:0 20px;color:#1a1a2e}
+    h1{font-size:20px;margin-bottom:4px}h2{font-size:13px;color:#888;font-weight:400;margin-bottom:24px}
+    .banner{padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:20px;background:#fff3e0;border:1px solid #ffcc80;color:#7a4f00}
+    .stats{display:flex;gap:32px;margin-bottom:24px}.stat-val{font-size:22px;font-weight:700}.stat-lbl{font-size:11px;color:#888}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    .note{margin-top:24px;padding:12px;background:#f0f0f6;border-radius:8px;font-size:11px;color:#888;line-height:1.6}
+    @media print{body{margin:16px}}</style></head><body>
+    <h1>🚶 Monaco GP 2026 — Walking Directions</h1>
+    <h2>${originPlace.name||'Origin'} → ${destPlace.name||'Destination'}</h2>
+    ${banner?`<div class="banner">${banner}</div>`:''}
+    <div class="stats">
+      <div><div class="stat-val">${leg.duration.text}</div><div class="stat-lbl">Walk time</div></div>
+      <div><div class="stat-val">${leg.distance.text}</div><div class="stat-lbl">Distance</div></div>
+    </div>
+    <table><tr style="background:#f4f4fa"><th style="padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:1px">#</th><th style="padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:1px">Instruction</th><th style="padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:1px">Dist</th></tr>${steps}</table>
+    <div class="note">⚠️ Route generated by Monaco GP 2026 Pedestrian Navigator. Detours shown reflect race-hour road closures. Verify timing on race day — closures may shift. monaco-gp-2026-navigator.vercel.app</div>
+    <script>window.print()<\/script></body></html>`);
+  w.document.close();
+}
 
 // ═══════════════════════════════════════════════════════
 // INFO PANEL
@@ -926,24 +998,33 @@ function openExternalDirections(){
 function setInfo(html){document.getElementById('infoContent').innerHTML=html;}
 function showFeatureInfo(feature,latLng){
   const{name,description,layer,layerNum}=feature.properties;
-  const color=LAYERS[layerNum]?.color||'#fff';
+  const color=LAYERS[layerNum]?.color||'#888';
   _lastInfoLatLng=latLng; _lastInfoName=name;
   setInfo(`
     <div class="info-name">${name}</div>
     <div class="info-layer-tag" style="color:${color}">${layer}</div>
     <div class="info-desc">${description}</div>
-    ${latLng?`<div style="display:flex;gap:6px;margin-top:10px">
-      <button class="dir-to-btn" style="flex:1" onclick="dirToFeature()">▶ Route Here</button>
-      <button class="dir-to-btn" style="flex:0 0 auto;padding:7px 10px;background:var(--card);border:1px solid var(--border)" title="Open in Google Maps" onclick="openNavTo(${latLng.lat()},${latLng.lng()})">↗</button>
+    ${latLng?`<div style="display:flex;gap:5px;margin-top:10px">
+      <button class="dir-to-btn" style="flex:1;background:#00963c;font-size:11px;padding:7px 6px" onclick="setFeatureAsOrigin()">▶ Start Here</button>
+      <button class="dir-to-btn" style="flex:1;font-size:11px;padding:7px 6px" onclick="dirToFeature()">⚑ End Here</button>
+      <button class="dir-to-btn" style="flex:0 0 auto;padding:7px 9px;background:var(--card);border:1px solid var(--border);color:var(--muted)" title="Open in Google Maps" onclick="openNavTo(${latLng.lat()},${latLng.lng()})">↗</button>
     </div>`:''}
   `);
+  document.getElementById('sidebar').scrollTop=0;
+}
+function setFeatureAsOrigin(){
+  if(!_lastInfoLatLng) return;
+  const name=_lastInfoName||'Selected Location';
+  document.getElementById('origin-input').value=name;
+  originPlace={geometry:{location:_lastInfoLatLng},name};
+  if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
+  if(destPlace?.geometry) requestDirections();
 }
 function dirToFeature(){
   if(!_lastInfoLatLng) return;
   const name=_lastInfoName||'Selected Location';
   document.getElementById('dest-input').value=name;
   destPlace={geometry:{location:_lastInfoLatLng},name};
-  document.getElementById('sidebar').scrollTop=0;
   if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
   if(originPlace?.geometry) requestDirections();
 }
@@ -1010,7 +1091,7 @@ function initMap(){
     center:{lat:43.7360,lng:7.4246},zoom:15,mapTypeId:'roadmap',
     mapTypeControl:false,streetViewControl:false,fullscreenControl:false,
     zoomControlOptions:{position:google.maps.ControlPosition.RIGHT_CENTER},
-    styles:DARK_STYLES,
+    styles:[],
   });
 
   // Lines and polygons only to data layer
