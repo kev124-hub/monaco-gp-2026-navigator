@@ -258,7 +258,7 @@
       .mobile-toggle { display:block; }
       .monaco-time { display:none; }
       .header-title { font-size:13px; }
-      .map-type-ctrl { right:10px; top:auto; bottom:60px; }
+      .map-type-ctrl { display:none; }
     }
   </style>
 </head>
@@ -321,6 +321,19 @@
             <button class="place-cat-btn" data-cat="cafe" onclick="searchNearbyPlaces('cafe')">☕ Cafes</button>
             <button class="place-cat-btn" data-cat="bar" onclick="searchNearbyPlaces('bar')">🍸 Bars</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Map Style (in-sidebar, always accessible) -->
+    <div class="s-section">
+      <div class="s-section-hdr no-toggle"><div class="s-label">Map Style</div></div>
+      <div class="s-body-inner" style="padding-top:4px;padding-bottom:10px">
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="theme-btn active" data-theme="dark"      onclick="setTheme('dark')">🌙 Dark</button>
+          <button class="theme-btn"        data-theme="light"     onclick="setTheme('light')">☀️ Light</button>
+          <button class="theme-btn"        data-theme="satellite" onclick="setTheme('satellite')">🛰 Satellite</button>
+          <button class="theme-btn"        data-theme="hybrid"    onclick="setTheme('hybrid')">🗺 Hybrid</button>
         </div>
       </div>
     </div>
@@ -672,7 +685,12 @@ function updateStatus(){
   document.getElementById('monacoTime').textContent=`Monaco ${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const {closed,sched}=getTrackStatus();
   const el=document.getElementById('trackStatus'), txt=document.getElementById('statusText');
-  if(!sched){el.className='track-status weekend-over';txt.textContent='Track Open';return;}
+  if(!sched){
+    const d=now.getFullYear()*10000+(now.getMonth()+1)*100+now.getDate();
+    if(d<20260604){el.className='track-status open';txt.textContent='Streets Open · Race Jun 4–7';}
+    else{el.className='track-status weekend-over';txt.textContent='Race Weekend Over';}
+    return;
+  }
   const cur=now.getHours()*60+now.getMinutes(), openAt=sched.oh*60+sched.om;
   if(closed){el.className='track-status closed';txt.textContent=`Track Closed · Opens ${sched.open}`;}
   else{el.className='track-status open';txt.textContent=cur>=openAt?'Track Open':`Track Open · Closes ${sched.closed}`;}
@@ -725,7 +743,7 @@ function setTheme(name){
   map.setMapTypeId(theme.mapTypeId);
   map.setOptions({styles:theme.styles});
   document.querySelectorAll('.theme-btn').forEach(b=>b.classList.remove('active'));
-  document.querySelector(`[data-theme="${name}"]`).classList.add('active');
+  document.querySelectorAll(`[data-theme="${name}"]`).forEach(b=>b.classList.add('active'));
 }
 
 // ═══════════════════════════════════════════════════════
