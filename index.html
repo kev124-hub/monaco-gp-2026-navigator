@@ -67,6 +67,7 @@
     .s-body { display:grid; grid-template-rows:1fr; overflow:hidden;
       transition:grid-template-rows .25s ease; }
     .s-body.collapsed { grid-template-rows:0fr; }
+    .s-body.collapsed .s-body-inner { padding-top:0; padding-bottom:0; }
     .s-body-inner { overflow:hidden; padding:0 14px 12px; min-height:0; }
     .s-body-inner.no-pad { padding:0; }
 
@@ -141,26 +142,6 @@
     .place-cat-btn.active { background:rgba(255,152,0,.2); border-color:rgba(255,152,0,.5); color:#ffb74d; }
 
     /* ── Scenario cards ── */
-    .sc-card { background:var(--card); border:1px solid var(--border); border-radius:9px;
-      padding:10px 12px; cursor:pointer; transition:border-color .15s; margin-bottom:7px; }
-    .sc-card:hover { border-color:#3a4a70; }
-    .sc-card.active { border-color:var(--blue); background:rgba(41,121,255,.08); }
-    .sc-head { display:flex; align-items:center; gap:7px; margin-bottom:4px; }
-    .sc-icon { font-size:16px; line-height:1; }
-    .sc-title { font-size:12px; font-weight:600; flex:1; line-height:1.3; }
-    .sc-badge { font-size:9px; font-weight:700; padding:2px 6px; border-radius:4px;
-      letter-spacing:.5px; flex-shrink:0; }
-    .badge-ticket { background:rgba(32,96,204,.15); color:#1a50b8; }
-    .badge-public { background:rgba(200,80,0,.12); color:#a04000; }
-    .badge-access { background:rgba(0,130,50,.12); color:#006828; }
-    .sc-route { font-size:11px; color:var(--muted); }
-    .step-list { margin-top:10px; }
-    .step-item { display:flex; gap:8px; margin-bottom:9px; font-size:11px; line-height:1.5; }
-    .step-num { background:var(--blue); color:#fff; width:17px; height:17px;
-      border-radius:50%; display:flex; align-items:center; justify-content:center;
-      font-size:9px; font-weight:700; flex-shrink:0; margin-top:1px; }
-    .step-text { color:#444460; }
-
     /* ── Info panel ── */
     .info-panel { padding:14px; min-height:0; }
     .info-empty { color:var(--muted); font-size:12px; line-height:1.5; }
@@ -170,7 +151,7 @@
     .dir-to-btn { display:flex; align-items:center; gap:6px; margin-top:10px;
       padding:7px 12px; background:var(--blue); color:#fff; border:none;
       border-radius:8px; font-size:12px; font-weight:600; font-family:inherit;
-      cursor:pointer; width:100%; justify-content:center; transition:background .12s; }
+      cursor:pointer; justify-content:center; transition:background .12s; }
     .dir-to-btn:hover { background:#1a67e8; }
 
     /* ── Sched button ── */
@@ -380,19 +361,6 @@
 
     <button class="sched-btn" onclick="openModal()">📅 &nbsp;View Full Race Schedule</button>
 
-    <!-- Example Routes (collapsible) -->
-    <div class="s-section">
-      <div class="s-section-hdr" onclick="toggleSection('routes')">
-        <div class="s-label">Example Routes</div>
-        <span class="chevron" id="chev-routes">▼</span>
-      </div>
-      <div class="s-body collapsed" id="body-routes">
-        <div class="s-body-inner">
-          <div id="scenarioCards"></div>
-        </div>
-      </div>
-    </div>
-
   </aside>
 
   <div class="map-wrap">
@@ -477,43 +445,6 @@ const THEMES = {
   satellite: {mapTypeId:'satellite', styles:[]},
   hybrid:    {mapTypeId:'hybrid',    styles:[]},
 };
-
-const SCENARIOS = [
-  {id:'A',icon:'🚉',title:'Train Station → Grandstand K',
-   route:'Upper exit → Moneghetti → Gate 8',badge:'Ticket Holder',badgeClass:'badge-ticket',
-   center:{lat:43.738,lng:7.419},zoom:16,
-   steps:['Use UPPER station exit (Moneghetti side) — NOT the lower doors which lead directly to the sealed track barrier',
-     'Walk east along Boulevard de Belgique, bypassing the sealed Sainte-Dévote valley',
-     'Take public elevator at Terrasses de la Coquille to descend to Avenue de la Costa',
-     'Walk to Gate 8 (Rue Grimaldi) and present Grandstand K ticket to clear security',
-     'Follow secure path behind pits to Grandstand K']},
-  {id:'B',icon:'🅿️',title:'Parking des Salines → Rocher GA',
-   route:'Free shuttle → Fontvieille → Gate 1',badge:'Accessible',badgeClass:'badge-access',
-   center:{lat:43.730,lng:7.416},zoom:15,
-   steps:['Do NOT walk via the footbridge — structural stairs make it inaccessible',
-     'Board FREE shuttle bus at Salines terminal (every 10 min, 08:00–20:00)',
-     'Ride 10 min to Avenue Albert II drop-off in Fontvieille (flat, accessible)',
-     'Walk east on flat Avenue Albert II sidewalks toward the harbor',
-     'Use Fontvieille shopping center elevators to descend to harbor level',
-     'Arrive Gate 1 (Avenue de la Porte Neuve) · present Rocher GA ticket']},
-  {id:'E',icon:'🎰',title:'La Condamine → Casino Square',
-   route:'ONLY public route: via Beausoleil (France)',badge:'No Ticket',badgeClass:'badge-public',
-   center:{lat:43.739,lng:7.421},zoom:15,
-   steps:['Walk north on upper Rue Grimaldi (above circuit barrier) to Rue Suffren Reymond',
-     'Continue north on Boulevard Rainier III to CP-2 Beausoleil border (no passport control)',
-     'Walk east along Avenue du Général de Gaulle through Beausoleil — no race restrictions in France',
-     'Descend via Avenue de Roqueville back into Monaco at CP-3 (Monte Carlo plateau)',
-     'ONLY public crossing between La Condamine and Monte Carlo during race hours — ~35 min']},
-  {id:'K',icon:'🏖️',title:'Larvotto Hotels → Port Hercule',
-   route:'Via station subterranean tunnel',badge:'No Ticket',badgeClass:'badge-public',
-   center:{lat:43.742,lng:7.431},zoom:15,
-   steps:['Walk west from Larvotto along Boulevard des Moulins',
-     'Take Boulevard des Moulins Lifts (VT-10) descending toward station level',
-     'Continue west along Boulevard de Suisse to Gare de Monaco',
-     'Enter station at Pont Sainte-Dévote entrance',
-     'Transit station subterranean corridor (free — no race ticket needed, climate controlled)',
-     'Exit at Port Hercule subterranean exit beside Sainte-Dévote church — fully under the track']},
-];
 
 // ── GeoJSON (non-point features only — points rendered as labeled markers) ──
 const GEOJSON_LINES = {type:'FeatureCollection',features:[
@@ -694,7 +625,7 @@ function getDetour(oLat,oLng,dLat,dLng){
 let map, directionsService, directionsRenderer, placesService;
 let originAC, destAC, originPlace=null, destPlace=null;
 let lastRouteResult=null;
-let activeScenario=null, sidebarOpen=false, currentTheme='light';
+let sidebarOpen=false, currentTheme='light';
 let simulateRaceClosed=false;
 const vis=Object.fromEntries(Object.entries(LAYERS).map(([k,v])=>[+k,v.visible]));
 const labeledMarkers=[]; // {marker, layerNum, feature}
@@ -874,7 +805,7 @@ function showPlaceInfo(place){
       <button class="dir-to-btn" style="flex:1;font-size:11px;padding:7px 6px;width:auto;margin-top:0" onclick="dirToFeature()">⚑ End Here</button>
       <button class="dir-to-btn" style="flex:0 0 auto;padding:7px 9px;background:var(--card);border:1px solid var(--border);color:var(--muted);font-size:10px;width:auto;margin-top:0" onclick="openNavTo(${lat},${lng})">Maps ↗</button>
     </div>`;
-  document.getElementById('sidebar').scrollTop=0;
+  document.querySelector('.info-panel').scrollIntoView({behavior:'smooth',block:'nearest'});
   if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
 }
 function clearPlaceMarkers(){
@@ -1044,44 +975,6 @@ function openNavTo(lat,lng){
 }
 
 // ═══════════════════════════════════════════════════════
-// SCENARIOS
-// ═══════════════════════════════════════════════════════
-function buildScenarios(){
-  document.getElementById('scenarioCards').innerHTML=SCENARIOS.map(s=>`
-    <div class="sc-card" id="sc-${s.id}" onclick="activateScenario('${s.id}')">
-      <div class="sc-head">
-        <span class="sc-icon">${s.icon}</span>
-        <span class="sc-title">${s.title}</span>
-        <span class="sc-badge ${s.badgeClass}">${s.badge}</span>
-      </div>
-      <div class="sc-route">${s.route}</div>
-    </div>`).join('');
-}
-function activateScenario(id){
-  if(activeScenario===id){
-    activeScenario=null;
-    document.querySelectorAll('.sc-card').forEach(c=>c.classList.remove('active'));
-    setInfo('<div class="info-empty">Click any map feature for details.</div>');
-    return;
-  }
-  activeScenario=id;
-  document.querySelectorAll('.sc-card').forEach(c=>c.classList.remove('active'));
-  document.getElementById(`sc-${id}`).classList.add('active');
-  if(!vis[9]) toggleLayer(9);
-  const s=SCENARIOS.find(x=>x.id===id);
-  map.panTo({lat:s.center.lat,lng:s.center.lng});
-  map.setZoom(s.zoom);
-  setInfo(`
-    <div class="info-name">${s.icon} ${s.title}</div>
-    <div class="info-layer-tag" style="color:#00E676">${s.route}</div>
-    <div class="step-list">${s.steps.map((step,i)=>`
-      <div class="step-item">
-        <div class="step-num">${i+1}</div>
-        <div class="step-text">${step}</div>
-      </div>`).join('')}</div>`);
-}
-
-// ═══════════════════════════════════════════════════════
 // MODAL & SIDEBAR
 // ═══════════════════════════════════════════════════════
 function openModal(){document.getElementById('modal').classList.add('show');}
@@ -1183,7 +1076,6 @@ function useMyLocation(){
 // BOOTSTRAP
 // ═══════════════════════════════════════════════════════
 buildLayers();
-buildScenarios();
 
 fetch('/api/config')
   .then(r=>r.json())
