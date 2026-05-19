@@ -448,10 +448,6 @@ const THEMES = {
 
 // ── GeoJSON (non-point features only — points rendered as labeled markers) ──
 const GEOJSON_LINES = {type:'FeatureCollection',features:[
-  // Layer 1
-  {type:'Feature',properties:{name:'Circuit de Monaco Track',layer:'Layer 1: Hard Track Closures',layerNum:1,
-    description:'Full 3.337 km Grand Prix track loop. Completely impassable during track-closed hours.'},
-    geometry:{type:'LineString',coordinates:[[7.4212,43.7351],[7.4214,43.7369],[7.4217,43.7370],[7.4238,43.7373],[7.4257,43.7378],[7.4272,43.7380],[7.4278,43.7385],[7.4276,43.7390],[7.4271,43.7394],[7.4287,43.7411],[7.4291,43.7409],[7.4293,43.7404],[7.4297,43.7403],[7.4303,43.7399],[7.4302,43.7387],[7.4285,43.7379],[7.4255,43.7372],[7.4237,43.7369],[7.4221,43.7367],[7.4218,43.7358],[7.4219,43.7353],[7.4222,43.7351],[7.4224,43.7342],[7.4223,43.7339],[7.4226,43.7332],[7.4231,43.7328],[7.4235,43.7326],[7.4232,43.7324],[7.4225,43.7324],[7.4224,43.7326],[7.4221,43.7330],[7.4217,43.7336],[7.4214,43.7343],[7.4212,43.7351]]}},
   // Layer 2
   {type:'Feature',properties:{name:'Quai des États-Unis Restricted Zone',layer:'Layer 2: Prohibited Zones',layerNum:2,description:'Harbor-side sealed zone. Public access strictly prohibited during track-closed hours.'},
     geometry:{type:'Polygon',coordinates:[[[7.4212,43.7351],[7.4214,43.7369],[7.4237,43.7369],[7.4255,43.7372],[7.4285,43.7379],[7.4221,43.7367],[7.4218,43.7358],[7.4212,43.7351]]]}},
@@ -624,7 +620,7 @@ function getDetour(oLat,oLng,dLat,dLng){
 // ═══════════════════════════════════════════════════════
 let map, directionsService, directionsRenderer, placesService;
 let originAC, destAC, originPlace=null, destPlace=null;
-let lastRouteResult=null;
+let lastRouteResult=null, circuitPolyline=null;
 let sidebarOpen=false, currentTheme='light';
 let simulateRaceClosed=false;
 const vis=Object.fromEntries(Object.entries(LAYERS).map(([k,v])=>[+k,v.visible]));
@@ -695,6 +691,8 @@ function buildLayers(){
 function toggleLayer(num){
   vis[num]=!vis[num];
   document.getElementById(`lr-${num}`).classList.toggle('off',!vis[num]);
+  // Circuit polyline (Layer 1 rendered via Directions API, not data layer)
+  if(num===1&&circuitPolyline) circuitPolyline.setMap(vis[1]?map:null);
   // Lines/polygons in data layer
   map.data.forEach(f=>{if(f.getProperty('layerNum')===num) map.data.overrideStyle(f,{visible:vis[num]});});
   // Labeled point markers
@@ -842,6 +840,49 @@ function initDirections(){
   destAC  =new google.maps.places.Autocomplete(document.getElementById('dest-input'),  opts);
   originAC.addListener('place_changed',()=>{originPlace=originAC.getPlace();});
   destAC.addListener('place_changed',  ()=>{destPlace  =destAC.getPlace();});
+  loadCircuitRoute();
+}
+function loadCircuitRoute(){
+  // Trace the 3.337km circuit by road-snapping via Directions API (driving).
+  // Origin = pit straight entry; destination = pit straight exit.
+  // 12 via-waypoints force the route through every named corner in lap order.
+  directionsService.route({
+    origin:     new google.maps.LatLng(43.7347,7.4206),   // pit straight (west end)
+    destination:new google.maps.LatLng(43.7354,7.4213),   // pit straight (east end / T1 approach)
+    waypoints:[
+      {location:new google.maps.LatLng(43.7391,7.4201),stopover:false}, // Sainte-Dévote T1
+      {location:new google.maps.LatLng(43.7409,7.4255),stopover:false}, // Beau Rivage / Massenet
+      {location:new google.maps.LatLng(43.7402,7.4296),stopover:false}, // Casino Square T4
+      {location:new google.maps.LatLng(43.7381,7.4303),stopover:false}, // Mirabeau Haute T5
+      {location:new google.maps.LatLng(43.7371,7.4299),stopover:false}, // Grand Hôtel hairpin T6
+      {location:new google.maps.LatLng(43.7394,7.4303),stopover:false}, // Portier T7
+      {location:new google.maps.LatLng(43.7370,7.4278),stopover:false}, // Tunnel IM2S mid
+      {location:new google.maps.LatLng(43.7355,7.4263),stopover:false}, // Nouvelle Chicane T9
+      {location:new google.maps.LatLng(43.7349,7.4256),stopover:false}, // Tabac T11
+      {location:new google.maps.LatLng(43.7364,7.4272),stopover:false}, // Swimming Pool T12–16
+      {location:new google.maps.LatLng(43.7327,7.4228),stopover:false}, // Rascasse T17–18
+      {location:new google.maps.LatLng(43.7325,7.4216),stopover:false}, // Anthony Noghès T19–20
+    ],
+    travelMode:google.maps.TravelMode.DRIVING,
+    optimizeWaypoints:false,
+  },(result,status)=>{
+    if(status!=='OK') return;
+    // Decode full step-level path for maximum road-hugging detail
+    const path=[];
+    result.routes[0].legs.forEach(leg=>leg.steps.forEach(step=>step.path.forEach(p=>path.push(p))));
+    circuitPolyline=new google.maps.Polyline({
+      path,strokeColor:'#DC143C',strokeWeight:4,strokeOpacity:.9,zIndex:5,
+      map:vis[1]?map:null,
+    });
+    circuitPolyline.addListener('click',evt=>{
+      showFeatureInfo({properties:{name:'Circuit de Monaco Track',
+        layer:'Layer 1: Hard Track Closures',layerNum:1,
+        description:'Full 3.337 km Grand Prix track loop. Completely impassable during track-closed hours.'}},evt.latLng);
+      if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
+    });
+    circuitPolyline.addListener('mouseover',()=>{circuitPolyline.setOptions({strokeWeight:7});map.getDiv().style.cursor='pointer';});
+    circuitPolyline.addListener('mouseout', ()=>{circuitPolyline.setOptions({strokeWeight:4});map.getDiv().style.cursor='';});
+  });
 }
 function requestDirections(){
   if(!originPlace?.geometry||!destPlace?.geometry){
@@ -1004,7 +1045,6 @@ function initMap(){
     const n=feature.getProperty('layerNum');
     if(!vis[n]) return{visible:false};
     switch(n){
-      case 1:  return{strokeColor:'#DC143C',strokeWeight:4,strokeOpacity:.9,zIndex:5};
       case 2:  return{fillColor:'#FF6D00',fillOpacity:.22,strokeColor:'#FF8C00',strokeWeight:1.5,strokeOpacity:.7,zIndex:3};
       case 5:  return{strokeColor:'#AB47BC',strokeWeight:3,strokeOpacity:.85,zIndex:7};
       case 6:  return{strokeColor:'#FFC107',strokeWeight:2.5,strokeOpacity:.8,zIndex:4};
