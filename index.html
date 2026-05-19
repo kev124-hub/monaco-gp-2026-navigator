@@ -43,7 +43,8 @@
     .sidebar { grid-column:1; grid-row:2; background:var(--panel);
       border-right:1px solid var(--border); overflow-y:auto; overflow-x:hidden;
       display:flex; flex-direction:column;
-      scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
+      scrollbar-width:thin; scrollbar-color:var(--border) transparent;
+      -webkit-overflow-scrolling:touch; }
     .sidebar::-webkit-scrollbar { width:4px; }
     .sidebar::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
 
@@ -77,6 +78,10 @@
     .dir-input { flex:1; background:transparent; border:none; outline:none;
       color:var(--text); font-size:12px; font-family:inherit; }
     .dir-input::placeholder { color:var(--muted); }
+    .gps-btn { background:transparent; border:none; cursor:pointer; padding:2px 4px;
+      font-size:16px; opacity:.6; transition:opacity .15s; flex-shrink:0; line-height:1; }
+    .gps-btn:hover { opacity:1; }
+    .gps-btn:disabled { opacity:.3; cursor:default; }
     .dir-go-btn { width:100%; padding:9px; background:var(--blue); color:#fff;
       border:none; border-radius:8px; font-size:13px; font-weight:700;
       font-family:inherit; cursor:pointer; transition:background .12s; margin-top:2px; }
@@ -232,11 +237,15 @@
     .pac-icon { display:none!important; }
 
     /* ── Mobile ── */
-    .mobile-toggle { display:none; position:fixed; bottom:16px; left:50%;
+    .sidebar-backdrop { display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,.5); z-index:24; }
+    .sidebar-backdrop.show { display:block; }
+    .mobile-toggle { display:none; position:fixed;
+      bottom:calc(16px + env(safe-area-inset-bottom, 0px)); left:50%;
       transform:translateX(-50%); z-index:30; background:var(--panel);
       border:1px solid var(--border); border-radius:20px; padding:8px 18px;
       font-size:13px; font-weight:600; color:var(--text); cursor:pointer;
-      font-family:inherit; box-shadow:0 4px 20px rgba(0,0,0,.4); }
+      font-family:inherit; box-shadow:0 4px 20px rgba(0,0,0,.4); white-space:nowrap; }
 
     @media(max-width:768px){
       .app { grid-template-columns:1fr; grid-template-rows:56px 1fr; }
@@ -276,6 +285,7 @@
         <div class="dir-row">
           <div class="dir-dot origin-dot"></div>
           <input id="origin-input" type="text" class="dir-input" placeholder="From: hotel, station, parking…">
+          <button class="gps-btn" id="gpsBtn" onclick="useMyLocation()" title="Use my location">📍</button>
         </div>
         <div class="dir-row">
           <div class="dir-dot dest-dot"></div>
@@ -352,6 +362,7 @@
   </div>
 </div>
 
+<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
 <button class="mobile-toggle" id="mobileToggle" onclick="toggleSidebar()">☰ &nbsp;Directions & Layers</button>
 
 <!-- Schedule modal -->
@@ -643,6 +654,7 @@ const vis=Object.fromEntries(Object.entries(LAYERS).map(([k,v])=>[+k,v.visible])
 const labeledMarkers=[]; // {marker, layerNum, feature}
 let placeMarkersList=[], activePlaceCat='lodging';
 let openPlaceIW=null;
+let _lastInfoLatLng=null, _lastInfoName=null;
 
 // ═══════════════════════════════════════════════════════
 // STATUS
@@ -810,6 +822,7 @@ function setDirPoint(type,name,lat,lng){
     destPlace={geometry:{location:latLng},name};
   }
   if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
+  if(originPlace?.geometry&&destPlace?.geometry) requestDirections();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -896,13 +909,25 @@ function setInfo(html){document.getElementById('infoContent').innerHTML=html;}
 function showFeatureInfo(feature,latLng){
   const{name,description,layer,layerNum}=feature.properties;
   const color=LAYERS[layerNum]?.color||'#fff';
-  const isPoint=latLng!=null;
+  _lastInfoLatLng=latLng; _lastInfoName=name;
   setInfo(`
     <div class="info-name">${name}</div>
     <div class="info-layer-tag" style="color:${color}">${layer}</div>
     <div class="info-desc">${description}</div>
-    ${isPoint?`<button class="dir-to-btn" onclick="openNavTo(${latLng.lat()},${latLng.lng()})">↗ Walking Directions Here</button>`:''}
+    ${latLng?`<div style="display:flex;gap:6px;margin-top:10px">
+      <button class="dir-to-btn" style="flex:1" onclick="dirToFeature()">▶ Route Here</button>
+      <button class="dir-to-btn" style="flex:0 0 auto;padding:7px 10px;background:var(--card);border:1px solid var(--border)" title="Open in Google Maps" onclick="openNavTo(${latLng.lat()},${latLng.lng()})">↗</button>
+    </div>`:''}
   `);
+}
+function dirToFeature(){
+  if(!_lastInfoLatLng) return;
+  const name=_lastInfoName||'Selected Location';
+  document.getElementById('dest-input').value=name;
+  destPlace={geometry:{location:_lastInfoLatLng},name};
+  document.getElementById('sidebar').scrollTop=0;
+  if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
+  if(originPlace?.geometry) requestDirections();
 }
 function openNavTo(lat,lng){
   window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking`,'_blank');
@@ -955,6 +980,7 @@ function handleOverlayClick(e){if(e.target===e.currentTarget) closeModal();}
 function toggleSidebar(){
   sidebarOpen=!sidebarOpen;
   document.getElementById('sidebar').classList.toggle('open',sidebarOpen);
+  document.getElementById('sidebarBackdrop').classList.toggle('show',sidebarOpen);
   document.getElementById('mobileToggle').textContent=sidebarOpen?'✕  Close':'☰  Directions & Layers';
 }
 
@@ -1010,6 +1036,37 @@ function initMap(){
   initDirections();
   updateStatus();
   setInterval(updateStatus,30_000);
+}
+
+// ═══════════════════════════════════════════════════════
+// GPS LOCATION
+// ═══════════════════════════════════════════════════════
+function useMyLocation(){
+  if(typeof google==='undefined'){
+    showBanner('warning','⚠️ Map not loaded yet — please wait a moment.');return;
+  }
+  if(!navigator.geolocation){
+    showBanner('warning','⚠️ Geolocation is not supported by your browser.');return;
+  }
+  const btn=document.getElementById('gpsBtn');
+  btn.textContent='⏳'; btn.disabled=true;
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      const lat=pos.coords.latitude,lng=pos.coords.longitude;
+      new google.maps.Geocoder().geocode({location:{lat,lng}},(results,status)=>{
+        btn.textContent='📍'; btn.disabled=false;
+        const name=(status==='OK'&&results[0])?results[0].formatted_address:`${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        document.getElementById('origin-input').value=name;
+        originPlace={geometry:{location:new google.maps.LatLng(lat,lng)},name};
+        if(destPlace?.geometry) requestDirections();
+      });
+    },
+    ()=>{
+      btn.textContent='📍'; btn.disabled=false;
+      showBanner('warning','⚠️ Could not get your location — check location permissions in your browser.');
+    },
+    {enableHighAccuracy:true,timeout:10000}
+  );
 }
 
 // ═══════════════════════════════════════════════════════
