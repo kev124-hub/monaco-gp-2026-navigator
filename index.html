@@ -807,7 +807,7 @@ function showPlaceInfo(place){
       <button class="dir-to-btn" style="flex:0 0 auto;padding:7px 9px;background:var(--card);border:1px solid var(--border);color:var(--muted);font-size:10px;width:auto;margin-top:0" onclick="openNavTo(${lat},${lng})">Maps ↗</button>
     </div>`;
   if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
-  scrollToPanel();
+  requestAnimationFrame(scrollToPanel);
 }
 function clearPlaceMarkers(){
   openPlaceIW?.close(); openPlaceIW=null;
@@ -874,21 +874,21 @@ function loadCircuitRoute(){
     // Tunnel IM2S (heading west under the hill)
     [7.4295,43.7373],[7.4284,43.7374],[7.4274,43.7373],
     [7.4264,43.7370],[7.4255,43.7366],
-    // Tunnel exit → Nouvelle Chicane T9 (heading west)
-    [7.4249,43.7362],[7.4244,43.7358],[7.4238,43.7356],
-    [7.4232,43.7357],[7.4228,43.7360],
-    // Tabac T11 (left turn heading south)
-    [7.4224,43.7358],[7.4222,43.7354],[7.4223,43.7349],
-    // Swimming Pool complex T12–T16
-    [7.4225,43.7344],[7.4228,43.7340],[7.4233,43.7338],
-    [7.4238,43.7338],[7.4242,43.7341],[7.4242,43.7345],
-    [7.4238,43.7346],[7.4234,43.7343],
-    // Approach to La Rascasse (heading west/south)
-    [7.4230,43.7339],[7.4226,43.7334],[7.4223,43.7329],
-    // La Rascasse T17–T18 (hairpin)
-    [7.4222,43.7327],[7.4218,43.7327],[7.4216,43.7330],[7.4215,43.7334],
-    // Anthony Noghès T19–T20 → rejoin pit straight
-    [7.4214,43.7339],[7.4213,43.7343],[7.4214,43.7347],
+    // Tunnel exit → Nouvelle Chicane T9 (heading west along harbour-side road)
+    [7.4248,43.7362],[7.4241,43.7360],[7.4234,43.7360],
+    [7.4228,43.7360],[7.4222,43.7360],
+    // Tabac T11 (left-hander, turning south onto Rte de la Piscine)
+    [7.4221,43.7357],[7.4221,43.7352],
+    // Swimming Pool T12–T16 (Rte de la Piscine — runs north-south along
+    // the harbour's west edge; S-curves stay tight to the road)
+    [7.4221,43.7347],[7.4222,43.7342],[7.4222,43.7337],
+    [7.4222,43.7332],[7.4222,43.7327],[7.4222,43.7322],
+    // La Rascasse T17–T18 (hairpin at southern end, ~lat 43.7318)
+    [7.4222,43.7318],[7.4221,43.7316],[7.4222,43.7315],
+    [7.4225,43.7316],[7.4226,43.7318],
+    // Anthony Noghès T19–T20 (sweeps NW back onto Boulevard Albert 1er)
+    [7.4225,43.7323],[7.4222,43.7329],[7.4219,43.7335],
+    [7.4216,43.7341],[7.4214,43.7347],
   ];
   const path=coords.map(([lng,lat])=>({lat,lng}));
   circuitPolyline=new google.maps.Polyline({
