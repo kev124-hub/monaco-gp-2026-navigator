@@ -95,6 +95,7 @@
     .dir-clear-btn:hover { color:var(--text); }
     .route-banner { margin-top:10px; padding:9px 11px; border-radius:8px;
       font-size:11px; line-height:1.55; font-weight:500; display:none; }
+    .route-banner.error { background:rgba(211,47,47,.15); border-color:#d32f2f; color:#b71c1c; }
     .route-banner.detour { background:rgba(232,0,45,.08); border:1px solid rgba(232,0,45,.3); color:#b00010; }
     .route-banner.normal { background:rgba(0,150,60,.08); border:1px solid rgba(0,150,60,.3); color:#006828; }
     .route-banner.warning { background:rgba(180,120,0,.08); border:1px solid rgba(180,120,0,.3); color:#7a5500; }
@@ -568,6 +569,7 @@ const WP = {
   cp3:           {lat:43.7408,lng:7.4313},
   zooEscalators: {lat:43.7302,lng:7.4160},
   moulinsLift:   {lat:43.7415,lng:7.4265}, // upper Bd des Moulins plateau (above circuit closure)
+  lazareSauvaigo:{lat:43.7363,lng:7.4195}, // Allée Lazare Sauvaigo — approved corridor west of circuit
 };
 const ZONE_PAIRS = {
   'FONTVIEILLE-LA_CONDAMINE': [WP.placeArmes],
@@ -584,9 +586,9 @@ const ZONE_PAIRS = {
   'MONEGHETTI-FONTVIEILLE':   [WP.station,WP.placeArmes],
   'MONTE_CARLO-LARVOTTO':     [{lat:43.7415,lng:7.4310}], // upper Av. de Grande-Bretagne plateau
   'MONTE_CARLO-ROCHER':       [WP.cp3,WP.cp2,WP.placeArmes],
-  'LARVOTTO-ROCHER':          [WP.moulinsLift,WP.station,WP.placeArmes],
-  'LARVOTTO-LA_CONDAMINE':    [WP.moulinsLift,WP.station],
-  'LARVOTTO-FONTVIEILLE':     [WP.moulinsLift,WP.station,WP.placeArmes],
+  'LARVOTTO-ROCHER':          [WP.moulinsLift,WP.station,WP.lazareSauvaigo,WP.placeArmes],
+  'LARVOTTO-LA_CONDAMINE':    [WP.moulinsLift,WP.station,WP.lazareSauvaigo],
+  'LARVOTTO-FONTVIEILLE':     [WP.moulinsLift,WP.station,WP.lazareSauvaigo,WP.placeArmes],
   'LARVOTTO-MONEGHETTI':      [WP.moulinsLift,WP.station],
   'ROCHER-MONEGHETTI':        [WP.placeArmes,WP.station],
   'ROCHER-MONTE_CARLO':       [WP.placeArmes,WP.cp2,WP.cp3],
@@ -622,7 +624,7 @@ function getDetour(oLat,oLng,dLat,dLng){
 // ═══════════════════════════════════════════════════════
 let map, directionsService, directionsRenderer, placesService;
 let originAC, destAC, originPlace=null, destPlace=null;
-let lastRouteResult=null, circuitPolyline=null;
+let lastRouteResult=null, circuitPolyline=null, _circuitCoords=null;
 let sidebarOpen=false, currentTheme='light';
 let simulateRaceClosed=false;
 const vis=Object.fromEntries(Object.entries(LAYERS).map(([k,v])=>[+k,v.visible]));
@@ -851,6 +853,7 @@ function loadCircuitRoute(){
   const coords=[
     [7.4213765,43.7347043],[7.4212906,43.7350686],[7.4212141,43.7357371],[7.4212311,43.735964],[7.4213031,43.7362114],[7.4213813,43.7364536],[7.4214185,43.7365602],[7.421439,43.7366818],[7.4214153,43.7368228],[7.4214395,43.7368929],[7.4215012,43.7369561],[7.4216123,43.7369917],[7.4217355,43.7370058],[7.4222202,43.7370368],[7.4226567,43.7370871],[7.4229755,43.7371378],[7.423765,43.7373145],[7.4240995,43.7373771],[7.4244063,43.7374171],[7.4247846,43.7374564],[7.4250417,43.737515],[7.425712,43.7377653],[7.4259572,43.7378208],[7.4263525,43.7378845],[7.4267263,43.7379269],[7.4270382,43.7379701],[7.4272569,43.7380412],[7.4274714,43.7381615],[7.4276144,43.7382727],[7.4277265,43.7383819],[7.427788,43.7384915],[7.4277871,43.7386223],[7.42775,43.7387357],[7.4277035,43.7388398],[7.4276208,43.7389662],[7.4275261,43.7390827],[7.4274207,43.7391731],[7.4272995,43.7392541],[7.427185,43.7393454],[7.4271362,43.7394381],[7.427137,43.7395087],[7.4271592,43.7395792],[7.4272039,43.7396512],[7.4272572,43.7397281],[7.4273574,43.7398368],[7.42866,43.741051],[7.4287445,43.7410922],[7.4288587,43.7410961],[7.4289676,43.7410603],[7.4290499,43.7410022],[7.4290843,43.740946],[7.4291011,43.7408654],[7.4291031,43.7407629],[7.4291349,43.740694],[7.4291961,43.7406116],[7.4292583,43.7405532],[7.4293746,43.7404267],[7.4294504,43.7402872],[7.429495,43.7402413],[7.4295839,43.7402042],[7.4296657,43.7402184],[7.4297193,43.7402514],[7.429742,43.7403173],[7.4297252,43.7403581],[7.429691,43.7403978],[7.4295105,43.7405123],[7.4293421,43.740681],[7.4293055,43.7407399],[7.4292957,43.7408009],[7.4293194,43.7408464],[7.4293857,43.7408984],[7.42944,43.740929],[7.4297062,43.7409992],[7.4300221,43.7410897],[7.4301539,43.7411016],[7.430235,43.741082],[7.4302928,43.7410499],[7.4303324,43.7410107],[7.4303572,43.7409588],[7.43033,43.74036],[7.430266,43.7399094],[7.4301613,43.739551],[7.4300243,43.7391558],[7.429795,43.738739],[7.4294397,43.7384055],[7.4289528,43.7381245],[7.4284914,43.7379414],[7.427976,43.7377564],[7.42747,43.7375897],[7.4270517,43.7374736],[7.4261812,43.7373142],[7.4257145,43.7372601],[7.4255951,43.7372352],[7.42553,43.737202],[7.4254917,43.7371509],[7.4254427,43.7370813],[7.4253862,43.7370532],[7.4252171,43.7370339],[7.4251384,43.7370368],[7.4250007,43.7370746],[7.4248985,43.7370777],[7.4236884,43.7369392],[7.4225573,43.7368243],[7.4224085,43.7368087],[7.4222906,43.7367921],[7.4221903,43.7367503],[7.4221061,43.7366736],[7.4220181,43.7365383],[7.4219287,43.7363768],[7.4218452,43.7362003],[7.4217867,43.7359955],[7.4217682,43.7358048],[7.4217793,43.7355482],[7.42183,43.73534],[7.4218932,43.7352529],[7.4221595,43.7350804],[7.42223,43.735001],[7.422411,43.7343129],[7.4224038,43.7342465],[7.422359,43.7341938],[7.4222972,43.7341514],[7.4222287,43.7340861],[7.4222005,43.7340227],[7.4222,43.7339453],[7.4224241,43.7334336],[7.4226088,43.733181],[7.4229101,43.7329165],[7.4230555,43.7328397],[7.4231905,43.7327897],[7.423339,43.7327397],[7.4234465,43.7326502],[7.4234734,43.7325633],[7.4234654,43.7325171],[7.42341,43.732471],[7.4232369,43.7324333],[7.4230237,43.7323955],[7.4227846,43.7323671],[7.4226315,43.7323718],[7.4225143,43.7324004],[7.4224572,43.7324446],[7.42243,43.7324783],[7.4224149,43.7325324],[7.4224015,43.7326023],[7.4223639,43.7326789],[7.4220756,43.7329813],[7.421873,43.7332958],[7.4217253,43.7335958],[7.4214637,43.73434],[7.4213765,43.7347043]
   ];
+  _circuitCoords=coords;
   const path=coords.map(([lng,lat])=>({lat,lng}));
   circuitPolyline=new google.maps.Polyline({
     path,strokeColor:'#DC143C',strokeWeight:4,strokeOpacity:.9,zIndex:5,
@@ -865,6 +868,23 @@ function loadCircuitRoute(){
   circuitPolyline.addListener('mouseover',()=>{circuitPolyline.setOptions({strokeWeight:7});map.getDiv().style.cursor='pointer';});
   circuitPolyline.addListener('mouseout', ()=>{circuitPolyline.setOptions({strokeWeight:4});map.getDiv().style.cursor='';});
 }
+function isNearCircuit(lat,lng){
+  if(!_circuitCoords) return false;
+  const cosLat=Math.cos(lat*Math.PI/180), T=25;
+  return _circuitCoords.some(([clng,clat])=>{
+    const dy=(lat-clat)*111320, dx=(lng-clng)*111320*cosLat;
+    return dx*dx+dy*dy<T*T;
+  });
+}
+// Returns an approved pedestrian waypoint that moves the route away from a circuit section.
+// Each escape point is on a named open corridor (Layer 10) well clear of the closed road.
+function getEscapeWaypoint(lat,lng){
+  if(lat>43.738&&lng>7.426) return{lat:43.7415,lng:7.4265}; // Portier/Fairmont → upper Bd des Moulins
+  if(lat>43.737)             return{lat:43.7408,lng:7.4177}; // Beau Rivage/Casino → CP-2 Beausoleil west
+  if(lng>7.422)              return{lat:43.7388,lng:7.4198}; // Chicane/Tabac/tunnel → station upper exit
+  return                           {lat:43.7348,lng:7.4175}; // Pit straight/Piscine → Fontvieille west
+}
+
 function requestDirections(){
   if(!originPlace?.geometry||!destPlace?.geometry){
     showBanner('warning','⚠️ Select both a start and end location from the dropdown.');return;
@@ -876,24 +896,63 @@ function requestDirections(){
     const r=getDetour(oLL.lat(),oLL.lng(),dLL.lat(),dLL.lng());
     waypoints=r.waypoints; detourKey=r.key;
   }
+  showBanner('normal','🔄 Calculating route…');
+  _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,0);
+}
+
+// Recursive re-router: tries up to 4 times to find a route that doesn't cross the circuit.
+// Each iteration adds escape waypoints for every violating segment found in the previous attempt.
+function _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,attempt){
   directionsService.route({
     origin:oLL,destination:dLL,travelMode:google.maps.TravelMode.WALKING,
     waypoints:waypoints.map(wp=>({location:new google.maps.LatLng(wp.lat,wp.lng),stopover:false})),
     optimizeWaypoints:false,
   },(result,status)=>{
     if(status!=='OK'){showBanner('warning',`⚠️ Could not calculate route (${status}). Try adjusting your locations.`);return;}
+
+    // On closed routes, check every decoded path point against the circuit centerline
+    let violation=null;
+    if(closed&&_circuitCoords){
+      const allPts=result.routes[0].legs.flatMap(l=>l.steps.flatMap(s=>s.path||[]));
+      violation=allPts.find(p=>isNearCircuit(p.lat(),p.lng()))||null;
+    }
+
+    if(violation&&attempt<4){
+      // Collect all violating points and derive unique escape waypoints
+      const allPts=result.routes[0].legs.flatMap(l=>l.steps.flatMap(s=>s.path||[]));
+      const violating=allPts.filter(p=>isNearCircuit(p.lat(),p.lng()));
+      const already=new Set(waypoints.map(w=>`${w.lat.toFixed(3)},${w.lng.toFixed(3)}`));
+      const newWPs=[...waypoints];
+      violating.forEach(p=>{
+        const e=getEscapeWaypoint(p.lat(),p.lng());
+        const k=`${e.lat.toFixed(3)},${e.lng.toFixed(3)}`;
+        if(!already.has(k)){already.add(k);newWPs.push(e);}
+      });
+      if(newWPs.length>waypoints.length){
+        _routeAttempt(oLL,dLL,newWPs,detourKey,closed,simulated,attempt+1);
+        return; // wait for next attempt
+      }
+    }
+
+    // Render the best route we found
     directionsRenderer.setDirections(result);
     lastRouteResult=result;
-    if(closed&&waypoints.length>0){
-      const label=detourKey?(CORRIDOR_LABELS[detourKey]||''):'';
+
+    if(violation){
+      // After up to 4 attempts the circuit is still unavoidable — destination is likely
+      // inaccessible via walking during race hours without crossing a closed section.
+      showBanner('error','⛔ Your destination cannot be reached without crossing the closed circuit. Check the nearest access gate (G1–G10) or crossing (CP1–8) on the map for the approved pedestrian entry point.');
+    } else if(closed&&detourKey){
+      const label=CORRIDOR_LABELS[detourKey]||'';
       const prefix=simulated?'⏰ Simulated Race Hours':'🔴 Track Closed';
-      showBanner('detour',`${prefix} · Route detoured around restricted areas${label?' · '+label:''}`);
+      const attempts=attempt>0?` (rerouted ${attempt}x to avoid circuit)`:'';
+      showBanner('detour',`${prefix} · Detoured around restricted areas${label?' · '+label:''}${attempts}`);
     } else if(closed){
-      const prefix=simulated?'⏰ Simulated':'🟢';
-      showBanner('normal',`${prefix} Track closed but both locations are in the same zone — no detour needed.`);
+      showBanner('normal',`${simulated?'⏰ Simulated':'🟢'} Track closed · Route does not cross the circuit.`);
     } else {
       showBanner('normal','🟢 Track open · Showing standard walking route.');
     }
+
     const leg=result.routes[0].legs[0];
     document.getElementById('dirDuration').textContent=leg.duration.text;
     document.getElementById('dirDistance').textContent=leg.distance.text;
