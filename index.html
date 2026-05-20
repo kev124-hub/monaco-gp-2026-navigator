@@ -1038,14 +1038,58 @@ function loadCircuitRoute(){
   circuitPolyline.addListener('mouseover',()=>{circuitPolyline.setOptions({strokeWeight:7});map.getDiv().style.cursor='pointer';});
   circuitPolyline.addListener('mouseout', ()=>{circuitPolyline.setOptions({strokeWeight:4});map.getDiv().style.cursor='';});
 }
-function isNearCircuit(lat,lng){
-  if(!_circuitCoords) return false;
-  const cosLat=Math.cos(lat*Math.PI/180), T=25;
-  return _circuitCoords.some(([clng,clat])=>{
-    const dy=(lat-clat)*111320, dx=(lng-clng)*111320*cosLat;
-    return dx*dx+dy*dy<T*T;
-  });
+// ── Geometric circuit-crossing detection ─────────────────────────────────────
+// Previous approach: flag any route point within 25m of the circuit centerline.
+// Problem: valid walking routes that run ALONGSIDE the circuit (e.g. train station
+// → Rue Grimaldi) had every step flagged, causing wrong escape waypoints to be
+// injected and producing looped/doubling-back routes.
+//
+// New approach: test whether a route path SEGMENT actually intersects a circuit
+// SEGMENT using 2D parametric cross-product intersection. A route running parallel
+// to or alongside the circuit will never intersect; only a route that cuts through
+// the closed section will trigger a violation.
+
+// True if finite line segment A1→A2 crosses finite segment B1→B2.
+// All points are plain {lat,lng} objects; we project to approx metres for stability.
+function _segsIntersect(a1,a2,b1,b2){
+  const cosLat=Math.cos((a1.lat+b1.lat)/2*Math.PI/180)*111320, dM=111320;
+  // Translate so a1 is the origin, convert everything to metres
+  const rX=(a2.lng-a1.lng)*cosLat, rY=(a2.lat-a1.lat)*dM;
+  const qX=(b1.lng-a1.lng)*cosLat, qY=(b1.lat-a1.lat)*dM;
+  const sX=(b2.lng-b1.lng)*cosLat, sY=(b2.lat-b1.lat)*dM;
+  const rxs=rX*sY-rY*sX;
+  if(Math.abs(rxs)<1e-6) return false; // parallel / collinear — not a crossing
+  const t=(qX*sY-qY*sX)/rxs;
+  const u=(qX*rY-qY*rX)/rxs;
+  // Strictly interior intersections only (0 < t,u < 1); touching endpoints not counted
+  return t>0.01&&t<0.99&&u>0.01&&u<0.99;
 }
+
+// Walk every decoded step in the route legs; return array of {lat,lng} midpoints
+// for each segment that actually crosses a circuit segment.
+function findCircuitCrossings(legs){
+  if(!_circuitCoords||_circuitCoords.length<2) return[];
+  const crossings=[];
+  for(const leg of legs){
+    for(const step of(leg.steps||[])){
+      const pts=step.path||[];
+      for(let i=0;i<pts.length-1;i++){
+        const a1={lat:pts[i].lat(),  lng:pts[i].lng()};
+        const a2={lat:pts[i+1].lat(),lng:pts[i+1].lng()};
+        for(let j=0;j<_circuitCoords.length-1;j++){
+          const b1={lat:_circuitCoords[j][1],  lng:_circuitCoords[j][0]};
+          const b2={lat:_circuitCoords[j+1][1],lng:_circuitCoords[j+1][0]};
+          if(_segsIntersect(a1,a2,b1,b2)){
+            crossings.push({lat:(a1.lat+a2.lat)/2,lng:(a1.lng+a2.lng)/2});
+            break; // one crossing per route segment is sufficient
+          }
+        }
+      }
+    }
+  }
+  return crossings;
+}
+
 // Returns an approved pedestrian waypoint that moves the route away from a circuit section.
 // Each escape point is on a named open corridor (Layer 10) well clear of the closed road.
 function getEscapeWaypoint(lat,lng){
@@ -1080,39 +1124,44 @@ function _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,attempt){
   },(result,status)=>{
     if(status!=='OK'){showBanner('warning',`⚠️ Could not calculate route (${status}). Try adjusting your locations.`);return;}
 
-    // On closed routes, check every decoded path point against the circuit centerline
-    let violation=null;
+    // On closed routes, check whether the returned route actually CROSSES the circuit
+    // polyline using geometric segment intersection — not proximity.
+    // Routes that run alongside (but don't cut through) the circuit are not violations.
+    let crossings=[];
     if(closed&&_circuitCoords){
-      const allPts=result.routes[0].legs.flatMap(l=>l.steps.flatMap(s=>s.path||[]));
-      violation=allPts.find(p=>isNearCircuit(p.lat(),p.lng()))||null;
+      crossings=findCircuitCrossings(result.routes[0].legs);
     }
 
-    if(violation&&attempt<4){
-      // Collect all violating points and derive unique escape waypoints
-      const allPts=result.routes[0].legs.flatMap(l=>l.steps.flatMap(s=>s.path||[]));
-      const violating=allPts.filter(p=>isNearCircuit(p.lat(),p.lng()));
+    if(crossings.length>0&&attempt<4){
+      // Derive unique escape waypoints from each crossing midpoint and retry
       const already=new Set(waypoints.map(w=>`${w.lat.toFixed(3)},${w.lng.toFixed(3)}`));
       const newWPs=[...waypoints];
-      violating.forEach(p=>{
-        const e=getEscapeWaypoint(p.lat(),p.lng());
+      crossings.forEach(p=>{
+        const e=getEscapeWaypoint(p.lat,p.lng);
         const k=`${e.lat.toFixed(3)},${e.lng.toFixed(3)}`;
         if(!already.has(k)){already.add(k);newWPs.push(e);}
       });
       if(newWPs.length>waypoints.length){
         _routeAttempt(oLL,dLL,newWPs,detourKey,closed,simulated,attempt+1);
-        return; // wait for next attempt
+        return;
       }
     }
 
-    // Render the best route we found
+    // If crossings remain after all attempts the destination is genuinely unreachable
+    // during race hours — clear any previous route display so the map isn't cluttered
+    // with the bad looped route, then show the guidance banner.
+    if(crossings.length>0){
+      directionsRenderer.setDirections(null);
+      lastRouteResult=null;
+      showBanner('error','⛔ Your destination cannot be reached without crossing the closed circuit. Check the nearest access gate (G1–G10) or crossing (CP1–8) on the map for the approved pedestrian entry point.');
+      return;
+    }
+
+    // Clean route — render it
     directionsRenderer.setDirections(result);
     lastRouteResult=result;
 
-    if(violation){
-      // After up to 4 attempts the circuit is still unavoidable — destination is likely
-      // inaccessible via walking during race hours without crossing a closed section.
-      showBanner('error','⛔ Your destination cannot be reached without crossing the closed circuit. Check the nearest access gate (G1–G10) or crossing (CP1–8) on the map for the approved pedestrian entry point.');
-    } else if(closed&&detourKey){
+    if(closed&&detourKey){
       const label=CORRIDOR_LABELS[detourKey]||'';
       const prefix=simulated?'⏰ Simulated Race Hours':'🔴 Track Closed';
       const attempts=attempt>0?` (rerouted ${attempt}x to avoid circuit)`:'';
