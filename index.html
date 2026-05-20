@@ -255,18 +255,34 @@
       font-size:13px; font-weight:600; color:var(--text); cursor:pointer;
       font-family:inherit; box-shadow:0 4px 20px rgba(0,0,0,.4); white-space:nowrap; }
 
+    /* Short/long status text — short hidden by default, swapped on mobile */
+    .status-short { display:none; }
+
     @media(max-width:768px){
       .app { grid-template-columns:1fr; grid-template-rows:56px 1fr; }
+
+      /* Sidebar: translateY(calc(100% + 80px)) adds an 80px buffer beyond the element's
+         own height to prevent peeking on iOS Safari, which reports a larger vh than the
+         visible viewport due to its collapsible browser chrome. */
       .sidebar { grid-column:1; grid-row:2; position:fixed; bottom:0; left:0; right:0;
         height:70vh; border-right:none; border-top:1px solid var(--border);
-        border-radius:16px 16px 0 0; z-index:25; transform:translateY(100%);
+        border-radius:16px 16px 0 0; z-index:25;
+        transform:translateY(calc(100% + 80px));
         transition:transform .3s cubic-bezier(.4,0,.2,1); }
       .sidebar.open { transform:translateY(0); }
+
       .map-wrap { grid-column:1; grid-row:2; }
       .mobile-toggle { display:block; }
       .monaco-time { display:none; }
-      .header-title { font-size:13px; }
+      .header-title    { font-size:13px; white-space:nowrap; }
+      .header-subtitle { font-size:10px; white-space:nowrap; }
       .map-type-ctrl { display:none; }
+
+      /* Status badge: compact on mobile so it doesn't crowd the title.
+         Show only short text; hide the verbose desktop version. */
+      .track-status { padding:4px 9px; font-size:11px; gap:5px; }
+      .status-long  { display:none; }
+      .status-short { display:inline; }
     }
 
     /* ── Tutorial Overlay ── */
@@ -440,7 +456,7 @@
     <div class="spacer"></div>
     <div class="monaco-time" id="monacoTime">—</div>
     <div class="track-status weekend-over" id="trackStatus">
-      <div class="status-dot"></div><span id="statusText">Loading…</span>
+      <div class="status-dot"></div><span id="statusText" class="status-long">Loading…</span><span id="statusShort" class="status-short"></span>
     </div>
   </header>
 
@@ -976,17 +992,22 @@ function updateStatus(){
   const now=getMonacoNow(), pad=n=>String(n).padStart(2,'0');
   document.getElementById('monacoTime').textContent=`Monaco ${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const {closed,sched,simulated}=getTrackStatus();
-  const el=document.getElementById('trackStatus'), txt=document.getElementById('statusText');
-  if(simulated){el.className='track-status closed';txt.textContent='⏰ Simulating Race Closed';return;}
+  const el=document.getElementById('trackStatus');
+  const txt=document.getElementById('statusText');
+  const sh=document.getElementById('statusShort');
+  function setStatus(cls,long,short){
+    el.className='track-status '+cls; txt.textContent=long; sh.textContent=short;
+  }
+  if(simulated){setStatus('closed','⏰ Simulating Race Closed','⏰ Simulate');return;}
   if(!sched){
     const d=now.getFullYear()*10000+(now.getMonth()+1)*100+now.getDate();
-    if(d<20260604){el.className='track-status open';txt.textContent='Streets Open · Race Jun 4–7';}
-    else{el.className='track-status weekend-over';txt.textContent='Race Weekend Over';}
+    if(d<20260604){setStatus('open','Streets Open · Race Jun 4–7','Open');}
+    else{setStatus('weekend-over','Race Weekend Over','Done');}
     return;
   }
   const cur=now.getHours()*60+now.getMinutes(), openAt=sched.oh*60+sched.om;
-  if(closed){el.className='track-status closed';txt.textContent=`Track Closed · Opens ${sched.open}`;}
-  else{el.className='track-status open';txt.textContent=cur>=openAt?'Track Open':`Track Open · Closes ${sched.closed}`;}
+  if(closed){setStatus('closed',`Track Closed · Opens ${sched.open}`,'Closed');}
+  else{setStatus('open',cur>=openAt?'Track Open':`Track Open · Closes ${sched.closed}`,'Open');}
 }
 
 // ═══════════════════════════════════════════════════════
