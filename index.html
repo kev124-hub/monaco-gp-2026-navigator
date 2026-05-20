@@ -1108,7 +1108,19 @@ function requestDirections(){
   let waypoints=[],detourKey=null;
   if(closed){
     const r=getDetour(oLL.lat(),oLL.lng(),dLL.lat(),dLL.lng());
-    waypoints=r.waypoints; detourKey=r.key;
+    detourKey=r.key;
+    // Filter out zone-pair waypoints that are within 100m of the origin or destination.
+    // When origin/destination is co-located with a waypoint (e.g. starting at the station
+    // when WP.station is the zone-pair waypoint), the near-duplicate creates a tiny U-turn
+    // stub that compounds badly when escape waypoints are added later, producing the
+    // visible looping/doubling-back routes.
+    const cos=Math.cos(oLL.lat()*Math.PI/180)*111320;
+    waypoints=r.waypoints.filter(wp=>{
+      const toO=Math.hypot((wp.lat-oLL.lat())*111320,(wp.lng-oLL.lng())*cos);
+      const toD=Math.hypot((wp.lat-dLL.lat())*111320,(wp.lng-dLL.lng())*cos);
+      return toO>100&&toD>100;
+    });
+    if(!waypoints.length) detourKey=null; // no usable waypoints; rely on crossing detection
   }
   showBanner('normal','🔄 Calculating route…');
   _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,0);
