@@ -383,6 +383,7 @@
         <button class="dir-go-btn" onclick="requestDirections()">🚶 Get Walking Directions</button>
         <button class="dir-clear-btn" id="clearBtn" onclick="clearDirections()">✕ Clear Route</button>
         <div class="route-banner" id="routeBanner"></div>
+        <button class="dir-clear-btn" id="credentialsOverride" onclick="requestDirectionsWithCredentials()" style="display:none;margin-top:6px;color:#1a50b8;border-color:rgba(32,96,204,.35);font-size:12px;font-weight:700">🎫 I Have Access — Show Route Anyway</button>
         <div class="dir-summary" id="dirSummary">
           <div class="dir-summary-row">
             <div><div class="dir-stat" id="dirDuration">—</div><div class="dir-stat-label">Walk time</div></div>
@@ -1036,6 +1037,12 @@ function loadCircuitRoute(){
 
   // Splice interpolated fill points into the gaps — reverse order so earlier insertions
   // don't shift the indices of later ones.
+  //
+  // Gap 44→45 (171m, Casino S / Beau Rivage) is intentionally NOT filled here.
+  // Straight-line interpolation across the Casino S-curves crosses legitimate
+  // pedestrian streets (e.g. Av. Princesse Alice, Bd des Moulins) causing false
+  // positives. The Casino section is handled via ZONE_PAIRS (cp2/cp3 waypoints)
+  // rather than crossing detection.
   [
     // Gap 146→147 (85m) — Anthony Noghes / start-finish approach
     { at:147, fill:[[7.4215945,43.7339679]] },
@@ -1043,8 +1050,6 @@ function loadCircuitRoute(){
     { at:102, fill:[[7.4231229,43.7368818]] },
     // Gap 100→101 (99m) — Bd Albert 1er harbor section (west)
     { at:101, fill:[[7.4242935,43.7370085]] },
-    // Gap 44→45 (171m) — Casino S / Beau Rivage crest (3 fill pts → ~43m spacing)
-    { at:45,  fill:[[7.4276830,43.7401403],[7.4280087,43.7404439],[7.4283344,43.7407475]] },
   ].forEach(({at,fill})=>_circuitCoords.splice(at,0,...fill));
 
   const path=coords.map(([lng,lat])=>({lat,lng}));
@@ -1096,14 +1101,21 @@ const RACE_CLOSED_ZONES=[
   // Pont Sainte-Dévote — pedestrian bridge directly over the Sainte Dévote hairpin.
   // Closed during all race/practice/qualifying sessions. The KML is missing the Bd d'Italie
   // section that runs beneath it, so segment-crossing detection cannot catch this.
-  {lat:43.73843,lng:7.41912,r:55,name:'Pont Sainte-Dévote (closed during race sessions)'},
+  //
+  // skipIfDestAboveLat: if the destination is north of this latitude, the bridge is just a
+  // convenient via point for an upper-area route — not a circuit crossing. Skip the check
+  // so Moneghetti/Monte-Carlo destinations aren't falsely blocked.
+  {lat:43.73843,lng:7.41912,r:55,
+   name:'Pont Sainte-Dévote (closed during race sessions)',
+   skipIfDestAboveLat:43.737},
 ];
 
-// Walk all route path points; return {lat,lng} of the first point that falls inside
-// any race-closed zone, or null if the route is clean.
-function findClosedZoneViolation(legs){
+// Walk all route path points; return the first zone violation, or null if the route is clean.
+// dLL: google.maps.LatLng of the destination, used for per-zone skip rules.
+function findClosedZoneViolation(legs,dLL){
   const pts=legs.flatMap(l=>l.steps.flatMap(s=>s.path||[]));
   for(const zone of RACE_CLOSED_ZONES){
+    if(zone.skipIfDestAboveLat&&dLL.lat()>zone.skipIfDestAboveLat) continue;
     const cos=Math.cos(zone.lat*Math.PI/180)*111320;
     const hit=pts.find(p=>{
       const dy=(p.lat()-zone.lat)*111320, dx=(p.lng()-zone.lng)*cos;
@@ -1192,7 +1204,7 @@ function _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,attempt){
     let closedZone=null;
     if(closed){
       if(_circuitCoords) crossings=findCircuitCrossings(result.routes[0].legs);
-      if(crossings.length===0) closedZone=findClosedZoneViolation(result.routes[0].legs);
+      if(crossings.length===0) closedZone=findClosedZoneViolation(result.routes[0].legs,dLL);
     }
     const hasViolation=crossings.length>0||closedZone!==null;
 
@@ -1214,12 +1226,27 @@ function _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,attempt){
     }
 
     // If violations remain after all attempts the destination is genuinely unreachable
-    // during race hours — clear the map and show a clear guidance banner.
+    // during race hours without special access. Clear the map, show guidance, and offer
+    // a credentials override for users with race-weekend passes or resident permits.
     if(hasViolation){
       directionsRenderer.setDirections(null);
       lastRouteResult=null;
-      const zoneName=closedZone?` (route passes through ${closedZone.name})`:'';
-      showBanner('error',`⛔ Your destination cannot be reached without crossing the closed circuit${zoneName}. Check the nearest access gate (G1–G10) or crossing (CP1–8) on the map for the approved pedestrian entry point.`);
+      // Clear stale summary/steps from any previous route
+      document.getElementById('dirSummary').style.display='none';
+      document.getElementById('dirSteps').innerHTML='';
+      document.getElementById('clearBtn').style.display='none';
+      const zoneName=closedZone?` Route passes through ${closedZone.name}.`:'';
+      showBanner('error',
+        `⛔ This destination is inside the closed circuit zone during race hours.${zoneName} ` +
+        `Check the nearest access gate (G1–G10) or crossing (CP1–8) on the map.\n\n` +
+        `🎫 If you have a race credential, hospitality pass, or resident permit, ` +
+        `tap below to see the most direct route anyway.`
+      );
+      // Show credentials override button beneath the banner
+      document.getElementById('credentialsOverride').style.display='block';
+      // Store current endpoints for the bypass route call
+      document.getElementById('credentialsOverride')._oLL=oLL;
+      document.getElementById('credentialsOverride')._dLL=dLL;
       return;
     }
 
@@ -1264,9 +1291,42 @@ function clearDirections(){
   document.getElementById('dirSteps').innerHTML='';
   document.getElementById('clearBtn').style.display='none';
   document.getElementById('dirSaveBtn').style.display='none';
+  document.getElementById('credentialsOverride').style.display='none';
   document.getElementById('origin-input').value='';
   document.getElementById('dest-input').value='';
   originPlace=null; destPlace=null; lastRouteResult=null;
+}
+
+// Bypass circuit restrictions for users with race credentials, hospitality passes,
+// or resident permits. Runs a plain walking route with no circuit checks applied.
+function requestDirectionsWithCredentials(){
+  const btn=document.getElementById('credentialsOverride');
+  const oLL=btn._oLL, dLL=btn._dLL;
+  if(!oLL||!dLL) return;
+  btn.style.display='none';
+  showBanner('warning','🎫 Credential route active — showing direct path through circuit area.');
+  directionsService.route({
+    origin:oLL, destination:dLL,
+    travelMode:google.maps.TravelMode.WALKING,
+    waypoints:[], optimizeWaypoints:false,
+  },(result,status)=>{
+    if(status!=='OK'){showBanner('warning',`⚠️ Could not calculate route (${status}).`);return;}
+    directionsRenderer.setDirections(result);
+    lastRouteResult=result;
+    const leg=result.routes[0].legs[0];
+    document.getElementById('dirDuration').textContent=leg.duration.text;
+    document.getElementById('dirDistance').textContent=leg.distance.text;
+    document.getElementById('dirSummary').style.display='block';
+    document.getElementById('clearBtn').style.display='block';
+    const steps=leg.steps;
+    document.getElementById('dirSteps').innerHTML=steps.map((s,i)=>`
+      <div class="dir-step">
+        <div class="dir-step-num">${i+1}</div>
+        <div class="dir-step-text">${s.instructions.replace(/<[^>]+>/g,' ')}</div>
+        <div class="dir-step-dist">${s.distance.text}</div>
+      </div>`).join('');
+    if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
+  });
 }
 function openExternalDirections(){
   if(!originPlace?.geometry||!destPlace?.geometry) return;
