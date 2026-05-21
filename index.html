@@ -1065,6 +1065,32 @@ function _segsIntersect(a1,a2,b1,b2){
   return t>0.01&&t<0.99&&u>0.01&&u<0.99;
 }
 
+// Named pedestrian infrastructure that is closed during race hours but not captured
+// by the KML circuit centerline (e.g. bridges physically above the circuit surface,
+// or streets adjacent to the KML whose closure isn't detectable by segment crossing).
+// Each zone has a centre {lat,lng}, radius in metres, and a descriptive name.
+const RACE_CLOSED_ZONES=[
+  // Pont Sainte-Dévote — pedestrian bridge directly over the Sainte Dévote hairpin.
+  // Closed during all race/practice/qualifying sessions. The KML is missing the Bd d'Italie
+  // section that runs beneath it, so segment-crossing detection cannot catch this.
+  {lat:43.73843,lng:7.41912,r:55,name:'Pont Sainte-Dévote (closed during race sessions)'},
+];
+
+// Walk all route path points; return {lat,lng} of the first point that falls inside
+// any race-closed zone, or null if the route is clean.
+function findClosedZoneViolation(legs){
+  const pts=legs.flatMap(l=>l.steps.flatMap(s=>s.path||[]));
+  for(const zone of RACE_CLOSED_ZONES){
+    const cos=Math.cos(zone.lat*Math.PI/180)*111320;
+    const hit=pts.find(p=>{
+      const dy=(p.lat()-zone.lat)*111320, dx=(p.lng()-zone.lng)*cos;
+      return dx*dx+dy*dy<zone.r*zone.r;
+    });
+    if(hit) return {lat:zone.lat,lng:zone.lng,name:zone.name};
+  }
+  return null;
+}
+
 // Walk every decoded step in the route legs; return array of {lat,lng} midpoints
 // for each segment that actually crosses a circuit segment.
 function findCircuitCrossings(legs){
@@ -1136,19 +1162,24 @@ function _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,attempt){
   },(result,status)=>{
     if(status!=='OK'){showBanner('warning',`⚠️ Could not calculate route (${status}). Try adjusting your locations.`);return;}
 
-    // On closed routes, check whether the returned route actually CROSSES the circuit
-    // polyline using geometric segment intersection — not proximity.
-    // Routes that run alongside (but don't cut through) the circuit are not violations.
+    // On closed routes, check for two types of violations:
+    // 1. Route segment geometrically crosses the circuit polyline (segment intersection test)
+    // 2. Route passes through a named race-closed zone (e.g. Pont Sainte-Dévote bridge)
     let crossings=[];
-    if(closed&&_circuitCoords){
-      crossings=findCircuitCrossings(result.routes[0].legs);
+    let closedZone=null;
+    if(closed){
+      if(_circuitCoords) crossings=findCircuitCrossings(result.routes[0].legs);
+      if(crossings.length===0) closedZone=findClosedZoneViolation(result.routes[0].legs);
     }
+    const hasViolation=crossings.length>0||closedZone!==null;
 
-    if(crossings.length>0&&attempt<4){
-      // Derive unique escape waypoints from each crossing midpoint and retry
+    if(hasViolation&&attempt<4){
+      // Collect violation points: crossing midpoints + closed-zone centres
+      const violationPts=[...crossings];
+      if(closedZone) violationPts.push({lat:closedZone.lat,lng:closedZone.lng});
       const already=new Set(waypoints.map(w=>`${w.lat.toFixed(3)},${w.lng.toFixed(3)}`));
       const newWPs=[...waypoints];
-      crossings.forEach(p=>{
+      violationPts.forEach(p=>{
         const e=getEscapeWaypoint(p.lat,p.lng);
         const k=`${e.lat.toFixed(3)},${e.lng.toFixed(3)}`;
         if(!already.has(k)){already.add(k);newWPs.push(e);}
@@ -1159,13 +1190,13 @@ function _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,attempt){
       }
     }
 
-    // If crossings remain after all attempts the destination is genuinely unreachable
-    // during race hours — clear any previous route display so the map isn't cluttered
-    // with the bad looped route, then show the guidance banner.
-    if(crossings.length>0){
+    // If violations remain after all attempts the destination is genuinely unreachable
+    // during race hours — clear the map and show a clear guidance banner.
+    if(hasViolation){
       directionsRenderer.setDirections(null);
       lastRouteResult=null;
-      showBanner('error','⛔ Your destination cannot be reached without crossing the closed circuit. Check the nearest access gate (G1–G10) or crossing (CP1–8) on the map for the approved pedestrian entry point.');
+      const zoneName=closedZone?` (route passes through ${closedZone.name})`:'';
+      showBanner('error',`⛔ Your destination cannot be reached without crossing the closed circuit${zoneName}. Check the nearest access gate (G1–G10) or crossing (CP1–8) on the map for the approved pedestrian entry point.`);
       return;
     }
 
