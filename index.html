@@ -383,7 +383,7 @@
         <button class="dir-go-btn" onclick="requestDirections()">🚶 Get Walking Directions</button>
         <button class="dir-clear-btn" id="clearBtn" onclick="clearDirections()">✕ Clear Route</button>
         <div class="route-banner" id="routeBanner"></div>
-        <button class="dir-clear-btn" id="credentialsOverride" onclick="requestDirectionsWithCredentials()" style="display:none;margin-top:6px;color:#1a50b8;border-color:rgba(32,96,204,.35);font-size:12px;font-weight:700">🎫 I Have Access — Show Route Anyway</button>
+        <button class="dir-clear-btn" id="credentialsOverride" onclick="requestDirectionsWithCredentials()" style="display:none;margin-top:6px;color:#1a50b8;border-color:rgba(32,96,204,.35);font-size:12px;font-weight:700">🎫 I Have Access — Route to Nearest Gate</button>
         <div class="dir-summary" id="dirSummary">
           <div class="dir-summary-row">
             <div><div class="dir-stat" id="dirDuration">—</div><div class="dir-stat-label">Walk time</div></div>
@@ -737,6 +737,40 @@ const WP = {
   moulinsLift:   {lat:43.7415,lng:7.4265}, // upper Bd des Moulins plateau (above circuit closure)
   lazareSauvaigo:{lat:43.7363,lng:7.4195}, // Allée Lazare Sauvaigo — approved corridor west of circuit
 };
+// Public approach waypoints for each gate — the last circuit-safe staging point
+// before each gate entrance. Gates are on the circuit boundary; routing to their
+// exact coordinates sends Google along the closed track. These WPs are proven
+// open corridors that put the user within easy walking distance of the gate.
+const GATE_APPROACH_WP = {
+  'G1':  WP.placeArmes,     // Porte Neuve — approach from Place d'Armes / Rampe Major
+  'G2':  WP.placeArmes,     // Avenue du Port — approach from Place d'Armes (harbor side)
+  'G3':  WP.placeArmes,     // Rue Saige — approach from Place d'Armes
+  'G4':  WP.placeArmes,     // Rue Princesse Caroline — Rue Grimaldi north from Place d'Armes
+  'G5':  WP.lazareSauvaigo, // Square Gastaud — Allée Lazare Sauvaigo corridor (west of circuit)
+  'G6':  WP.lazareSauvaigo, // Rue Suffren Reymond — Lazare Sauvaigo corridor
+  'G7':  WP.station,        // Rue Princesse Antoinette — station upper exit
+  'G8':  WP.station,        // Rue Grimaldi — station upper exit (Moneghetti detour arrival)
+  'G9':  WP.moulinsLift,    // Place du Casino — upper Bd des Moulins plateau → Av. de la Costa
+  'G10': WP.moulinsLift,    // Portier/Fairmont — upper Bd des Moulins → Av. Princesse Alice
+};
+// Intermediate via-points that keep the credential approach route on the correct
+// (non-circuit) side. All gates G1–G8 use [cp3 → cp2] — the full Beausoleil
+// corridor — to route safely from any origin zone (including Larvotto) through
+// France above the circuit before descending to the gate approach area.
+// G9/G10 only need cp3 because moulinsLift is already east of cp2.
+const GATE_APPROACH_VIA = {
+  'G1': [WP.cp3, WP.cp2],
+  'G2': [WP.cp3, WP.cp2],
+  'G3': [WP.cp3, WP.cp2],
+  'G4': [WP.cp3, WP.cp2],
+  'G5': [WP.cp3, WP.cp2],
+  'G6': [WP.cp3, WP.cp2],
+  'G7': [WP.cp3, WP.cp2],
+  'G8': [WP.cp3, WP.cp2],
+  'G9': [WP.cp3],
+  'G10':[WP.cp3],
+};
+
 const ZONE_PAIRS = {
   'FONTVIEILLE-LA_CONDAMINE': [WP.placeArmes],
   'FONTVIEILLE-ROCHER':       [],
@@ -798,6 +832,9 @@ const labeledMarkers=[]; // {marker, layerNum, feature}
 let placeMarkersList=[], activePlaceCat='lodging';
 let openPlaceIW=null;
 let _lastInfoLatLng=null, _lastInfoName=null;
+let _credentialGate=null;
+let _watchId=null, _offRouteCount=0;
+let _routeGen=0; // incremented to cancel stale _routeAttempt callbacks
 
 // ═══════════════════════════════════════════════════════
 // STATUS
@@ -1151,6 +1188,31 @@ function findCircuitCrossings(legs){
   return crossings;
 }
 
+// Returns the minimum distance (metres) from point P to segment A→B.
+function _pointToSegDist(plat,plng,alat,alng,blat,blng,cos){
+  const dM=111320;
+  const px=(plng-alng)*cos, py=(plat-alat)*dM;
+  const dx=(blng-alng)*cos, dy=(blat-alat)*dM;
+  const lenSq=dx*dx+dy*dy;
+  if(lenSq===0) return Math.hypot(px,py);
+  const t=Math.max(0,Math.min(1,(px*dx+py*dy)/lenSq));
+  return Math.hypot(px-t*dx,py-t*dy);
+}
+
+// Returns true if the given point is within 30m of any circuit segment.
+// Used to immediately flag destinations that are on the closed track surface
+// (e.g. Avenue d'Ostende along Beau Rivage) without waiting for crossing detection,
+// which only catches routes that geometrically cross — not routes that run alongside.
+function isInsideCircuitZone(lat,lng){
+  if(!_circuitCoords||_circuitCoords.length<2) return false;
+  const cos=Math.cos(lat*Math.PI/180)*111320;
+  for(let i=0;i<_circuitCoords.length-1;i++){
+    const b1=_circuitCoords[i],b2=_circuitCoords[i+1];
+    if(_pointToSegDist(lat,lng,b1[1],b1[0],b2[1],b2[0],cos)<60) return true;
+  }
+  return false;
+}
+
 // Returns an approved pedestrian waypoint that moves the route away from a circuit section.
 // Each escape point is on a named open corridor (Layer 10) well clear of the closed road.
 function getEscapeWaypoint(lat,lng){
@@ -1183,18 +1245,44 @@ function requestDirections(){
     });
     if(!waypoints.length) detourKey=null; // no usable waypoints; rely on crossing detection
   }
+  // If the destination is on the circuit surface (within 60m of centreline),
+  // block immediately — the crossing detector only catches segments that cross
+  // the circuit, not routes that run alongside it (e.g. Beau Rivage / Av. d'Ostende).
+  // Exception: skip the block if destination is near a known public approach WP
+  // (placeArmes, station, etc. sit adjacent to the circuit but are genuinely accessible).
+  const _dCos=Math.cos(dLL.lat()*Math.PI/180)*111320;
+  const _nearWP=Object.values(WP).some(wp=>Math.hypot((dLL.lat()-wp.lat)*111320,(dLL.lng()-wp.lng)*_dCos)<80);
+  if(closed && !_nearWP && isInsideCircuitZone(dLL.lat(),dLL.lng())){
+    document.getElementById('dirSummary').style.display='none';
+    document.getElementById('dirSteps').innerHTML='';
+    document.getElementById('clearBtn').style.display='none';
+    directionsRenderer.setDirections(null); lastRouteResult=null;
+    const zoneName='';
+    showBanner('error',
+      `⛔ This destination is inside the closed circuit zone during race hours. `+
+      `Check the nearest access gate (G1–G10) or crossing (CP1–8) on the map.\n\n`+
+      `🎫 If you have a race credential, hospitality pass, or resident permit, `+
+      `tap below to be routed to the nearest access gate for your destination.`
+    );
+    const btn=document.getElementById('credentialsOverride');
+    btn.style.display='block'; btn._oLL=oLL; btn._dLL=dLL;
+    return;
+  }
+
   showBanner('normal','🔄 Calculating route…');
-  _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,0);
+  const gen=++_routeGen;
+  _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,0,gen);
 }
 
 // Recursive re-router: tries up to 4 times to find a route that doesn't cross the circuit.
 // Each iteration adds escape waypoints for every violating segment found in the previous attempt.
-function _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,attempt){
+function _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,attempt,gen){
   directionsService.route({
     origin:oLL,destination:dLL,travelMode:google.maps.TravelMode.WALKING,
     waypoints:waypoints.map(wp=>({location:new google.maps.LatLng(wp.lat,wp.lng),stopover:false})),
     optimizeWaypoints:false,
   },(result,status)=>{
+    if(gen!==_routeGen) return; // stale — a newer route request superseded this one
     if(status!=='OK'){showBanner('warning',`⚠️ Could not calculate route (${status}). Try adjusting your locations.`);return;}
 
     // On closed routes, check for two types of violations:
@@ -1220,7 +1308,7 @@ function _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,attempt){
         if(!already.has(k)){already.add(k);newWPs.push(e);}
       });
       if(newWPs.length>waypoints.length){
-        _routeAttempt(oLL,dLL,newWPs,detourKey,closed,simulated,attempt+1);
+        _routeAttempt(oLL,dLL,newWPs,detourKey,closed,simulated,attempt+1,gen);
         return;
       }
     }
@@ -1240,7 +1328,7 @@ function _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,attempt){
         `⛔ This destination is inside the closed circuit zone during race hours.${zoneName} ` +
         `Check the nearest access gate (G1–G10) or crossing (CP1–8) on the map.\n\n` +
         `🎫 If you have a race credential, hospitality pass, or resident permit, ` +
-        `tap below to see the most direct route anyway.`
+        `tap below to be routed to the nearest access gate for your destination.`
       );
       // Show credentials override button beneath the banner
       document.getElementById('credentialsOverride').style.display='block';
@@ -1253,6 +1341,7 @@ function _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,attempt){
     // Clean route — render it
     directionsRenderer.setDirections(result);
     lastRouteResult=result;
+    startOffRouteWatch();
 
     if(closed&&detourKey){
       const label=CORRIDOR_LABELS[detourKey]||'';
@@ -1285,7 +1374,8 @@ function showBanner(type,text){
   b.className=`route-banner ${type}`; b.textContent=text; b.style.display='block';
 }
 function clearDirections(){
-  if(directionsRenderer) directionsRenderer.setDirections({routes:[]});
+  stopOffRouteWatch();
+  if(directionsRenderer) directionsRenderer.setDirections(null);
   document.getElementById('routeBanner').style.display='none';
   document.getElementById('dirSummary').style.display='none';
   document.getElementById('dirSteps').innerHTML='';
@@ -1297,37 +1387,122 @@ function clearDirections(){
   originPlace=null; destPlace=null; lastRouteResult=null;
 }
 
-// Bypass circuit restrictions for users with race credentials, hospitality passes,
-// or resident permits. Runs a plain walking route with no circuit checks applied.
+// Returns the access gate (Layer 3) nearest to the given lat/lng.
+function findNearestGate(lat,lng){
+  const cos=Math.cos(lat*Math.PI/180)*111320;
+  let nearest=null, minDist=Infinity;
+  POINT_FEATURES.filter(f=>f.layerNum===3).forEach(gate=>{
+    const [gLng,gLat]=gate.coords;
+    const d=Math.hypot((gLat-lat)*111320,(gLng-lng)*cos);
+    if(d<minDist){minDist=d;nearest=gate;}
+  });
+  return nearest;
+}
+
+// For users with credentials: find the nearest access gate to their destination,
+// then route to that gate's PUBLIC APPROACH WAYPOINT using pre-defined safe
+// via-points. Circuit crossing detection is intentionally bypassed here because:
+//  (a) approach WPs are known public locations, not inside the closed zone
+//  (b) the zone-pair system cannot reliably route to WPs that are also zone
+//      boundary points (the WP ends up filtered as co-located with destination)
+//  (c) GATE_APPROACH_VIA handles the directional safety instead
 function requestDirectionsWithCredentials(){
   const btn=document.getElementById('credentialsOverride');
   const oLL=btn._oLL, dLL=btn._dLL;
   if(!oLL||!dLL) return;
+
+  const gate=findNearestGate(dLL.lat(),dLL.lng());
+  if(!gate) return;
+
+  _routeGen++; // cancel any still-running _routeAttempt retries
+
+  const wp=GATE_APPROACH_WP[gate.label]||WP.station;
+  const via=GATE_APPROACH_VIA[gate.label]||[];
+  const approachLatLng=new google.maps.LatLng(wp.lat,wp.lng);
+
   btn.style.display='none';
-  showBanner('warning','🎫 Credential route active — showing direct path through circuit area.');
+  showBanner('warning',`🔄 Finding route to ${gate.name}…`);
+
+  document.getElementById('dest-input').value=gate.name;
+  destPlace={geometry:{location:approachLatLng},name:gate.name};
+
   directionsService.route({
-    origin:oLL, destination:dLL,
+    origin:oLL, destination:approachLatLng,
     travelMode:google.maps.TravelMode.WALKING,
-    waypoints:[], optimizeWaypoints:false,
+    waypoints:via.map(w=>({location:new google.maps.LatLng(w.lat,w.lng),stopover:false})),
+    optimizeWaypoints:false,
   },(result,status)=>{
-    if(status!=='OK'){showBanner('warning',`⚠️ Could not calculate route (${status}).`);return;}
+    if(status!=='OK'){
+      showBanner('warning',`⚠️ Could not calculate route to ${gate.name} (${status}).`);
+      return;
+    }
     directionsRenderer.setDirections(result);
     lastRouteResult=result;
+    startOffRouteWatch();
     const leg=result.routes[0].legs[0];
     document.getElementById('dirDuration').textContent=leg.duration.text;
     document.getElementById('dirDistance').textContent=leg.distance.text;
     document.getElementById('dirSummary').style.display='block';
     document.getElementById('clearBtn').style.display='block';
-    const steps=leg.steps;
-    document.getElementById('dirSteps').innerHTML=steps.map((s,i)=>`
+    document.getElementById('dirSaveBtn').style.display='flex';
+    document.getElementById('dirSteps').innerHTML=leg.steps.map((s,i)=>`
       <div class="dir-step">
         <div class="dir-step-num">${i+1}</div>
-        <div class="dir-step-text">${s.instructions.replace(/<[^>]+>/g,' ')}</div>
+        <div class="dir-step-text">${s.instructions.replace(/<[^>]+>/g,' ').trim()}</div>
         <div class="dir-step-dist">${s.distance.text}</div>
       </div>`).join('');
+    showBanner('warning',`🎫 Routed to ${gate.name} · Present your credential at the gate entrance`);
     if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
   });
 }
+// ── Off-route detection & recalculation ──────────────────────────────────────
+// Watches GPS position while a route is active. If the user strays > 60m from
+// the route polyline for 2 consecutive fixes, recalculates from current position.
+// Conditions at Monaco can change without notice — this keeps the route current.
+function startOffRouteWatch(){
+  if(!navigator.geolocation) return;
+  stopOffRouteWatch();
+  _offRouteCount=0;
+  _watchId=navigator.geolocation.watchPosition(
+    checkOffRoute,
+    ()=>{}, // silently ignore permission/hardware errors
+    {enableHighAccuracy:true,timeout:15000,maximumAge:3000}
+  );
+}
+
+function stopOffRouteWatch(){
+  if(_watchId!==null){navigator.geolocation.clearWatch(_watchId);_watchId=null;}
+  _offRouteCount=0;
+}
+
+function checkOffRoute(pos){
+  if(!lastRouteResult){stopOffRouteWatch();return;}
+  const lat=pos.coords.latitude, lng=pos.coords.longitude;
+  const cos=Math.cos(lat*Math.PI/180)*111320;
+  const pts=lastRouteResult.routes[0].legs.flatMap(l=>l.steps.flatMap(s=>s.path||[]));
+  if(!pts.length) return;
+  const minDist=pts.reduce((min,p)=>{
+    const d=Math.hypot((p.lat()-lat)*111320,(p.lng()-lng)*cos);
+    return d<min?d:min;
+  },Infinity);
+  if(minDist>60){
+    _offRouteCount++;
+    if(_offRouteCount>=2){
+      stopOffRouteWatch();
+      const curLatLng=new google.maps.LatLng(lat,lng);
+      new google.maps.Geocoder().geocode({location:{lat,lng}},(results,status)=>{
+        const name=(status==='OK'&&results[0])?results[0].formatted_address:`${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        document.getElementById('origin-input').value=name;
+        originPlace={geometry:{location:curLatLng},name};
+        showBanner('warning','📍 Off route — recalculating from your current position…');
+        requestDirections();
+      });
+    }
+  } else {
+    _offRouteCount=0;
+  }
+}
+
 function openExternalDirections(){
   if(!originPlace?.geometry||!destPlace?.geometry) return;
   const o=originPlace.geometry.location, d=destPlace.geometry.location;
