@@ -683,6 +683,7 @@ const POINT_FEATURES = [
        ['Gate 8 — Rue Grimaldi','Grandstand A, Grandstands K1-K3, General Admission Z1. Key arrival from Moneghetti detour.',[7.4195,43.7378],'G8',3],
        ['Gate 9 — Place du Casino','Grandstand B overlooking Casino Square.',[7.4280,43.7391],'G9',3],
        ['Gate 10 — Portier','Grandstand C between Portier and Tunnel entrance.',[7.4295,43.7395],'G10',3],
+       ['Beau Rivage — Av. d\'Ostende Credential Access','Credential check point for VIP/hospitality venues on Av. d\'Ostende between Av. de la Costa and Escalier de la Costa. 43.73838°N 7.42430°E. Approach from the west via station/Moneghetti — do NOT approach from the circuit (Beau Rivage) side.',[7.42430,43.73838],'VIP',3],
   ].map(([name,description,coords,label,ln])=>({name,description,coords,label,layerNum:ln,layer:'Layer 3: Gated Checkpoints'}))),
   // Layer 4: Lifts
   ...([['Parking des Salines Lift','Descends 45m from level –15 to Avenue Pasteur.',[7.4132,43.7351],'↕',4],
@@ -737,6 +738,7 @@ const WP = {
   moulinsLift:   {lat:43.7415,lng:7.4265}, // upper Bd des Moulins plateau (above circuit closure)
   lazareSauvaigo:{lat:43.7363,lng:7.4195}, // Allée Lazare Sauvaigo — approved corridor west of circuit
   cp4:           {lat:43.7420,lng:7.4288}, // CP-4 Beausoleil central border — staging for G9/G10 approach
+  avOstende:     {lat:43.73838,lng:7.42430}, // Beau Rivage VIP credential check — Av. d'Ostende
 };
 // Public approach waypoints for each gate — the last circuit-safe staging point
 // before each gate entrance. Gates are on the circuit boundary; routing to their
@@ -753,6 +755,7 @@ const GATE_APPROACH_WP = {
   'G8':  WP.station,        // Rue Grimaldi — station upper exit (Moneghetti detour arrival)
   'G9':  WP.cp4,            // Place du Casino — CP-4 Beausoleil central → walk down Av. de la Costa
   'G10': WP.cp4,            // Portier/Fairmont — CP-4 Beausoleil central → walk down Av. Princesse Alice
+  'VIP': WP.avOstende,      // Beau Rivage VIP access — route directly to credential check point
 };
 // Via-points for the credential approach route to each gate.
 // G9/G10: [cp3] routes through Beausoleil east border then to cp4 (Beausoleil
@@ -768,6 +771,7 @@ const GATE_APPROACH_VIA = {
   'G7':[], 'G8':[],
   'G9': [WP.cp3],
   'G10':[WP.cp3],
+  'VIP':[],  // approached from west (station/Moneghetti side) — no via needed
 };
 
 const ZONE_PAIRS = {
@@ -1428,10 +1432,13 @@ function clearDirections(){
 function findNearestGate(oLat,oLng,dLat,dLng){
   const oz=classifyZone(oLat,oLng);
   let allowed;
+  // G9/G10 require approaching via Beausoleil (cp3→cp4), which means crossing the
+  // Casino circuit section if the origin is already west of it (Moneghetti, La Condamine).
+  // Those zones use west-side gates (G7/G8 via station, VIP via Av. d'Ostende access).
   if(oz==='LARVOTTO'||oz==='MONTE_CARLO')        allowed=new Set(['G9','G10']);
-  else if(oz==='MONEGHETTI')                     allowed=new Set(['G7','G8','G9','G10']);
+  else if(oz==='MONEGHETTI')                     allowed=new Set(['G7','G8','VIP']);
   else if(oz==='FONTVIEILLE'||oz==='ROCHER')     allowed=new Set(['G1','G2','G3','G4','G5','G6']);
-  else                                            allowed=null; // LA_CONDAMINE: all gates
+  else /* LA_CONDAMINE */                        allowed=new Set(['G1','G2','G3','G4','G5','G6','G7','G8','VIP']);
   const cos=Math.cos(dLat*Math.PI/180)*111320;
   let nearest=null, minDist=Infinity;
   POINT_FEATURES
