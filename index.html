@@ -1452,16 +1452,17 @@ function findNearestGate(oLat,oLng,dLat,dLng){
 }
 
 // For users with credentials: find the nearest access gate to their destination,
-// Credential routing dispatcher.
+// Credential routing — no exceptions, no geographic filtering.
+// ALL credentialed destinations route via the VIP access checkpoint on
+// Av. d'Ostende as a mandatory stopover, then continue to the actual building.
 //
-// BEAU RIVAGE SECTION (dest within 600m of VIP, lat < 43.741, lng > 7.426):
-//   ALL origins — no exceptions — route via the VIP access point as a stopover,
-//   then continue to the actual building on Av. d'Ostende.
-//   Approach path: origin → [Beausoleil via cp3/cp4 for east origins] → VIP
-//   checkpoint (stopover, present credential here) → Av. d'Ostende → building.
+// Approach to VIP:
+//   LARVOTTO / MONTE_CARLO — via Beausoleil (cp3→cp4) so the descent follows
+//     Av. de la Costa past Académie de Danse Princesse Grace to Av. d'Ostende.
+//   All other origins — route directly to VIP from the accessible west side.
 //
-// ALL OTHER CIRCUIT-ZONE DESTINATIONS:
-//   Find the nearest accessible gate (origin-zone-aware), route to its approach WP.
+// The original destination is NEVER replaced — the route always ends at the
+// user's actual building.
 function requestDirectionsWithCredentials(){
   const btn=document.getElementById('credentialsOverride');
   const oLL=btn._oLL, dLL=btn._dLL;
@@ -1469,46 +1470,18 @@ function requestDirectionsWithCredentials(){
 
   _routeGen++; // cancel any still-running _routeAttempt retries
 
-  // ── Beau Rivage section detection ──────────────────────────────────────────
-  const _dc=Math.cos(dLL.lat()*Math.PI/180)*111320;
-  const _dvip=Math.hypot((dLL.lat()-WP.avOstende.lat)*111320,(dLL.lng()-WP.avOstende.lng)*_dc);
-  const isBeauRivage=_dvip<600 && dLL.lat()<43.741 && dLL.lng()>7.426;
-
-  let routeDest, waypoints, bannerText;
-
-  if(isBeauRivage){
-    // ── Beau Rivage: origin → [approach] → VIP (stopover) → building ─────────
-    // East/north origins (Larvotto/MonteCarlo): approach via Beausoleil cp3→cp4
-    // so the descent to VIP follows Av. de la Costa (the approved access path).
-    // West origins (Moneghetti/La Condamine/etc.): route directly to VIP.
-    const oz=classifyZone(oLL.lat(),oLL.lng());
-    const approachWPs=(oz==='LARVOTTO'||oz==='MONTE_CARLO')?[WP.cp3,WP.cp4]:[];
-    waypoints=[
-      ...approachWPs.map(w=>({location:new google.maps.LatLng(w.lat,w.lng),stopover:false})),
-      {location:new google.maps.LatLng(WP.avOstende.lat,WP.avOstende.lng),stopover:true},
-    ];
-    routeDest=dLL; // continue past VIP checkpoint to the actual building
-    // Keep original dest-input; only update destPlace for off-route recalc
-    // (destPlace already set from the user's original search)
-    bannerText=`🎫 Credential route · Present pass at VIP marker on Av. d'Ostende · then continue to your destination`;
-  } else {
-    // ── Other circuit destinations: route to nearest accessible gate ──────────
-    const gate=findNearestGate(oLL.lat(),oLL.lng(),dLL.lat(),dLL.lng());
-    if(!gate) return;
-    const wp=GATE_APPROACH_WP[gate.label]||WP.station;
-    const via=GATE_APPROACH_VIA[gate.label]||[];
-    waypoints=via.map(w=>({location:new google.maps.LatLng(w.lat,w.lng),stopover:false}));
-    routeDest=new google.maps.LatLng(wp.lat,wp.lng);
-    document.getElementById('dest-input').value=gate.name;
-    destPlace={geometry:{location:routeDest},name:gate.name};
-    bannerText=`🎫 Routed to ${gate.name} · Present your credential at the gate entrance`;
-  }
+  const oz=classifyZone(oLL.lat(),oLL.lng());
+  const approachWPs=(oz==='LARVOTTO'||oz==='MONTE_CARLO')?[WP.cp3,WP.cp4]:[];
+  const waypoints=[
+    ...approachWPs.map(w=>({location:new google.maps.LatLng(w.lat,w.lng),stopover:false})),
+    {location:new google.maps.LatLng(WP.avOstende.lat,WP.avOstende.lng),stopover:true},
+  ];
 
   btn.style.display='none';
-  showBanner('warning',`🔄 Calculating credential route…`);
+  showBanner('warning','🔄 Calculating credential route…');
 
   directionsService.route({
-    origin:oLL, destination:routeDest,
+    origin:oLL, destination:dLL,
     travelMode:google.maps.TravelMode.WALKING,
     waypoints, optimizeWaypoints:false,
   },(result,status)=>{
@@ -1520,14 +1493,14 @@ function requestDirectionsWithCredentials(){
     lastRouteResult=result;
     startOffRouteWatch();
 
-    // Multi-leg route (VIP stopover splits legs) — sum duration and distance
+    // Multi-leg (VIP stopover creates two legs) — sum across all legs
     const legs=result.routes[0].legs;
     const totSec=legs.reduce((s,l)=>s+l.duration.value,0);
     const totM  =legs.reduce((s,l)=>s+l.distance.value,0);
-    const durTxt=totSec<3600?Math.round(totSec/60)+' mins':(totSec/3600).toFixed(1)+' hrs';
-    const disTxt=totM>=1000?(totM/1000).toFixed(1)+' km':totM+'m';
-    document.getElementById('dirDuration').textContent=durTxt;
-    document.getElementById('dirDistance').textContent=disTxt;
+    document.getElementById('dirDuration').textContent=
+      totSec<3600?Math.round(totSec/60)+' mins':(totSec/3600).toFixed(1)+' hrs';
+    document.getElementById('dirDistance').textContent=
+      totM>=1000?(totM/1000).toFixed(1)+' km':totM+'m';
     document.getElementById('dirSummary').style.display='block';
     document.getElementById('clearBtn').style.display='block';
     document.getElementById('dirSaveBtn').style.display='flex';
@@ -1537,7 +1510,7 @@ function requestDirectionsWithCredentials(){
         <div class="dir-step-text">${s.instructions.replace(/<[^>]+>/g,' ').trim()}</div>
         <div class="dir-step-dist">${s.distance.text}</div>
       </div>`).join('');
-    showBanner('warning',bannerText);
+    showBanner('warning',`🎫 Credential route · Present pass at VIP marker on Av. d'Ostende · then continue to your destination`);
     if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
   });
 }
