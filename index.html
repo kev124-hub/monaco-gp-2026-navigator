@@ -739,6 +739,7 @@ const WP = {
   lazareSauvaigo:{lat:43.7363,lng:7.4195}, // Allée Lazare Sauvaigo — approved corridor west of circuit
   cp4:           {lat:43.7420,lng:7.4288}, // CP-4 Beausoleil central border — staging for G9/G10 approach
   acadDanse:     {lat:43.7395,lng:7.4250}, // upper Av. de la Costa (addr ~30) — north entry point before descent past Académie de Danse Princesse Grace
+  bdCharlotte:   {lat:43.741, lng:7.4248}, // Bd Princesse Charlotte — Larvotto credential corridor to Bd Rainier III
   avOstende:     {lat:43.73838,lng:7.42430}, // Beau Rivage VIP credential check — Av. d'Ostende
 };
 // Public approach waypoints for each gate — the last circuit-safe staging point
@@ -1430,16 +1431,23 @@ function clearDirections(){
 //   MONEGHETTI              → G7–G10 (station approach or Beausoleil)
 //   FONTVIEILLE / ROCHER    → G1–G6 (harbor/south side, Place d'Armes approach)
 //   LA_CONDAMINE            → all gates (central zone, either direction)
-function findNearestGate(oLat,oLng,dLat,dLng){
+function findNearestGate(oLat,oLng,dLat,dLng,excludeVIP=false,ignoreZone=false){
   const oz=classifyZone(oLat,oLng);
   let allowed;
-  // G9/G10 require approaching via Beausoleil (cp3→cp4), which means crossing the
-  // Casino circuit section if the origin is already west of it (Moneghetti, La Condamine).
-  // Those zones use west-side gates (G7/G8 via station, VIP via Av. d'Ostende access).
-  if(oz==='LARVOTTO'||oz==='MONTE_CARLO')        allowed=new Set(['G9','G10']);
-  else if(oz==='MONEGHETTI')                     allowed=new Set(['G7','G8','VIP']);
-  else if(oz==='FONTVIEILLE'||oz==='ROCHER')     allowed=new Set(['G1','G2','G3','G4','G5','G6']);
-  else /* LA_CONDAMINE */                        allowed=new Set(['G1','G2','G3','G4','G5','G6','G7','G8','VIP']);
+  if(ignoreZone){
+    // Credential holders may approach any gate via circuit-safe corridors —
+    // select purely by proximity to destination, no origin-zone restriction.
+    allowed=new Set(['G1','G2','G3','G4','G5','G6','G7','G8','G9','G10']);
+  } else {
+    // G9/G10 require approaching via Beausoleil (cp3→cp4), which means crossing the
+    // Casino circuit section if the origin is already west of it (Moneghetti, La Condamine).
+    // Those zones use west-side gates (G7/G8 via station, VIP via Av. d'Ostende access).
+    if(oz==='LARVOTTO'||oz==='MONTE_CARLO')      allowed=new Set(['G9','G10']);
+    else if(oz==='MONEGHETTI')                   allowed=new Set(['G7','G8','VIP']);
+    else if(oz==='FONTVIEILLE'||oz==='ROCHER')   allowed=new Set(['G1','G2','G3','G4','G5','G6']);
+    else /* LA_CONDAMINE */                      allowed=new Set(['G1','G2','G3','G4','G5','G6','G7','G8','VIP']);
+  }
+  if(excludeVIP) allowed.delete('VIP'); // VIP gate reserved for Beau Rivage destinations only
   const cos=Math.cos(dLat*Math.PI/180)*111320;
   let nearest=null, minDist=Infinity;
   POINT_FEATURES
@@ -1452,20 +1460,25 @@ function findNearestGate(oLat,oLng,dLat,dLng){
   return nearest||POINT_FEATURES.find(f=>f.layerNum===3); // fallback
 }
 
-// For users with credentials: find the nearest access gate to their destination,
-// Credential routing — no exceptions, no geographic filtering.
-// ALL credentialed destinations route via the VIP access checkpoint on
-// Av. d'Ostende as a mandatory stopover, then continue to the actual building.
+// Credential routing — two cases:
 //
-// Approach to VIP:
-//   LARVOTTO / MONTE_CARLO — Av. Princesse Grace → public lift (moulinsLift,
-//     near Le 21 Princesse Grace) → Bd des Moulins → Av. de la Costa (cp4) →
-//     past Académie de Danse Princesse Grace → Av. d'Ostende (VIP checkpoint).
-//     Keeps the user entirely off the circuit and out of exclusion zones.
-//   All other origins — route directly to VIP from the accessible west side.
+// 1. BEAU RIVAGE destinations (lat 43.736–43.739, lng > 7.424 — the Av. d'Ostende strip):
+//    All origins use the VIP gate on Av. d'Ostende as a mandatory stopover.
+//    Approach by origin zone:
+//      LARVOTTO/MONTE_CARLO  → moulinsLift → acadDanse → avOstende
+//        (Av. Princesse Grace → public lift → Bd des Moulins → Av. de la Costa)
+//      FONTVIEILLE/ROCHER    → station → avOstende
+//        (Bd Rainier III north → around Pont Saint-Dévote → Av. d'Ostende)
+//      MONEGHETTI/LA_CONDAMINE → avOstende direct (already west-side)
+//
+// 2. ALL OTHER destinations: nearest gate (VIP excluded, zone ignored for credential
+//    holders). Approach by origin zone:
+//      LARVOTTO/MONTE_CARLO  → bdCharlotte → gate GATE_APPROACH_WP
+//        (Bd Princesse Charlotte → Bd Rainier III → nearest gate)
+//      All other origins     → gate GATE_APPROACH_WP only
 //
 // The original destination is NEVER replaced — the route always ends at the
-// user's actual building on Av. d'Ostende.
+// user's actual building.
 function requestDirectionsWithCredentials(){
   const btn=document.getElementById('credentialsOverride');
   const oLL=btn._oLL, dLL=btn._dLL;
@@ -1474,11 +1487,40 @@ function requestDirectionsWithCredentials(){
   _routeGen++; // cancel any still-running _routeAttempt retries
 
   const oz=classifyZone(oLL.lat(),oLL.lng());
-  const approachWPs=(oz==='LARVOTTO'||oz==='MONTE_CARLO')?[WP.moulinsLift,WP.acadDanse]:[];
-  const waypoints=[
-    ...approachWPs.map(w=>({location:new google.maps.LatLng(w.lat,w.lng),stopover:false})),
-    {location:new google.maps.LatLng(WP.avOstende.lat,WP.avOstende.lng),stopover:true},
-  ];
+  const dLat=dLL.lat(), dLng=dLL.lng();
+  // Beau Rivage: the strip of hospitality buildings along Av. d'Ostende east of
+  // Av. de la Costa. Only this area uses the VIP gate on Av. d'Ostende.
+  const isBeauRivage = dLat > 43.736 && dLat < 43.739 && dLng > 7.424;
+
+  let waypoints, bannerText;
+  if(isBeauRivage){
+    let approachWPs;
+    if(oz==='LARVOTTO'||oz==='MONTE_CARLO')    approachWPs=[WP.moulinsLift,WP.acadDanse];
+    else if(oz==='FONTVIEILLE'||oz==='ROCHER') approachWPs=[WP.station];
+    else                                        approachWPs=[];
+    waypoints=[
+      ...approachWPs.map(w=>({location:new google.maps.LatLng(w.lat,w.lng),stopover:false})),
+      {location:new google.maps.LatLng(WP.avOstende.lat,WP.avOstende.lng),stopover:true},
+    ];
+    bannerText=`🎫 Credential route · Present pass at VIP marker on Av. d'Ostende · then continue to your destination`;
+  } else {
+    // Zone ignored: credential holders may reach any gate via safe corridors.
+    const gate=findNearestGate(oLL.lat(),oLL.lng(),dLat,dLng,/*excludeVIP=*/true,/*ignoreZone=*/true);
+    const gWP=GATE_APPROACH_WP[gate.label];
+    const vias=[];
+    if(oz==='LARVOTTO'||oz==='MONTE_CARLO'){
+      if(gate.label==='G9'||gate.label==='G10'){
+        // Casino-side gates: Beausoleil approach (Bd des Moulins → top of Av. de la Costa)
+        vias.push(WP.moulinsLift, WP.cp4);
+      } else {
+        // Harbor/station-side gates: Bd Princesse Charlotte → Bd Rainier III descent
+        vias.push(WP.bdCharlotte, WP.station);
+      }
+    }
+    if(gWP&&gWP!==WP.station) vias.push(gWP); // add gate staging WP unless already covered by station
+    waypoints=vias.map(w=>({location:new google.maps.LatLng(w.lat,w.lng),stopover:false}));
+    bannerText=`🎫 Credential route · Present pass at ${gate.label} · then continue to your destination`;
+  }
 
   btn.style.display='none';
   showBanner('warning','🔄 Calculating credential route…');
@@ -1513,7 +1555,7 @@ function requestDirectionsWithCredentials(){
         <div class="dir-step-text">${s.instructions.replace(/<[^>]+>/g,' ').trim()}</div>
         <div class="dir-step-dist">${s.distance.text}</div>
       </div>`).join('');
-    showBanner('warning',`🎫 Credential route · Present pass at VIP marker on Av. d'Ostende · then continue to your destination`);
+    showBanner('warning', bannerText);
     if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
   });
 }
