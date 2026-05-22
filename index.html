@@ -736,6 +736,7 @@ const WP = {
   zooEscalators: {lat:43.7302,lng:7.4160},
   moulinsLift:   {lat:43.7415,lng:7.4265}, // upper Bd des Moulins plateau (above circuit closure)
   lazareSauvaigo:{lat:43.7363,lng:7.4195}, // Allée Lazare Sauvaigo — approved corridor west of circuit
+  cp4:           {lat:43.7420,lng:7.4288}, // CP-4 Beausoleil central border — staging for G9/G10 approach
 };
 // Public approach waypoints for each gate — the last circuit-safe staging point
 // before each gate entrance. Gates are on the circuit boundary; routing to their
@@ -750,8 +751,8 @@ const GATE_APPROACH_WP = {
   'G6':  WP.lazareSauvaigo, // Rue Suffren Reymond — Lazare Sauvaigo corridor
   'G7':  WP.station,        // Rue Princesse Antoinette — station upper exit
   'G8':  WP.station,        // Rue Grimaldi — station upper exit (Moneghetti detour arrival)
-  'G9':  WP.moulinsLift,    // Place du Casino — upper Bd des Moulins plateau → Av. de la Costa
-  'G10': WP.moulinsLift,    // Portier/Fairmont — upper Bd des Moulins → Av. Princesse Alice
+  'G9':  WP.cp4,            // Place du Casino — CP-4 Beausoleil central → walk down Av. de la Costa
+  'G10': WP.cp4,            // Portier/Fairmont — CP-4 Beausoleil central → walk down Av. Princesse Alice
 };
 // Intermediate via-points that keep the credential approach route on the correct
 // (non-circuit) side. All gates G1–G8 use [cp3 → cp2] — the full Beausoleil
@@ -1145,6 +1146,12 @@ const RACE_CLOSED_ZONES=[
   {lat:43.73843,lng:7.41912,r:55,
    name:'Pont Sainte-Dévote (closed during race sessions)',
    skipIfDestAboveLat:43.737},
+  // Casino S-curves (gap 44→45 in KML — 171m, no circuit segments).
+  // Routes through this section cannot be caught by geometric crossing detection.
+  // skipIfDestAboveLat: skip when destination is in Beausoleil/above the casino.
+  {lat:43.7404,lng:7.4280,r:100,
+   name:'Casino Square circuit section (closed during race sessions)',
+   skipIfDestAboveLat:43.742},
 ];
 
 // Walk all route path points; return the first zone violation, or null if the route is clean.
@@ -1208,7 +1215,7 @@ function isInsideCircuitZone(lat,lng){
   const cos=Math.cos(lat*Math.PI/180)*111320;
   for(let i=0;i<_circuitCoords.length-1;i++){
     const b1=_circuitCoords[i],b2=_circuitCoords[i+1];
-    if(_pointToSegDist(lat,lng,b1[1],b1[0],b2[1],b2[0],cos)<60) return true;
+    if(_pointToSegDist(lat,lng,b1[1],b1[0],b2[1],b2[0],cos)<80) return true;
   }
   return false;
 }
@@ -1336,6 +1343,29 @@ function _routeAttempt(oLL,dLL,waypoints,detourKey,closed,simulated,attempt,gen)
       document.getElementById('credentialsOverride')._oLL=oLL;
       document.getElementById('credentialsOverride')._dLL=dLL;
       return;
+    }
+
+    // Final destination check: even if no segment crossing was detected, block if the
+    // destination sits on the circuit surface (route ran alongside rather than across).
+    // This catches cases where proximity check at request-time was skipped or missed.
+    if(closed){
+      const _fc=Math.cos(dLL.lat()*Math.PI/180)*111320;
+      const _fw=Object.values(WP).some(wp=>Math.hypot((dLL.lat()-wp.lat)*111320,(dLL.lng()-wp.lng)*_fc)<100);
+      if(!_fw&&isInsideCircuitZone(dLL.lat(),dLL.lng())){
+        directionsRenderer.setDirections(null); lastRouteResult=null;
+        document.getElementById('dirSummary').style.display='none';
+        document.getElementById('dirSteps').innerHTML='';
+        document.getElementById('clearBtn').style.display='none';
+        showBanner('error',
+          `⛔ This destination is inside the closed circuit zone during race hours. `+
+          `Check the nearest access gate (G1–G10) or crossing (CP1–8) on the map.\n\n`+
+          `🎫 If you have a race credential, hospitality pass, or resident permit, `+
+          `tap below to be routed to the nearest access gate for your destination.`
+        );
+        const btn=document.getElementById('credentialsOverride');
+        btn.style.display='block'; btn._oLL=oLL; btn._dLL=dLL;
+        return;
+      }
     }
 
     // Clean route — render it
