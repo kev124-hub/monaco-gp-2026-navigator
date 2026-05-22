@@ -754,20 +754,18 @@ const GATE_APPROACH_WP = {
   'G9':  WP.cp4,            // Place du Casino — CP-4 Beausoleil central → walk down Av. de la Costa
   'G10': WP.cp4,            // Portier/Fairmont — CP-4 Beausoleil central → walk down Av. Princesse Alice
 };
-// Intermediate via-points that keep the credential approach route on the correct
-// (non-circuit) side. All gates G1–G8 use [cp3 → cp2] — the full Beausoleil
-// corridor — to route safely from any origin zone (including Larvotto) through
-// France above the circuit before descending to the gate approach area.
-// G9/G10 only need cp3 because moulinsLift is already east of cp2.
+// Via-points for the credential approach route to each gate.
+// G9/G10: [cp3] routes through Beausoleil east border then to cp4 (Beausoleil
+//   central) — stays entirely in France above the circuit. TESTED AND VERIFIED.
+// G7/G8: no via — origin will always be MONEGHETTI (same zone as station), direct.
+// G1–G6: no via — origin will always be FONTVIEILLE/ROCHER/LA_CONDAMINE,
+//   direct to placeArmes/lazareSauvaigo from the harbor side.
+// NOTE: [cp3, cp2] was previously used for G1–G8 but MUST NOT be used — going
+//   from cp3 (east Beausoleil) to cp2 (west Beausoleil) at lat ~43.740 forces
+//   Google through the Casino circuit section between the two borders.
 const GATE_APPROACH_VIA = {
-  'G1': [WP.cp3, WP.cp2],
-  'G2': [WP.cp3, WP.cp2],
-  'G3': [WP.cp3, WP.cp2],
-  'G4': [WP.cp3, WP.cp2],
-  'G5': [WP.cp3, WP.cp2],
-  'G6': [WP.cp3, WP.cp2],
-  'G7': [WP.cp3, WP.cp2],
-  'G8': [WP.cp3, WP.cp2],
+  'G1':[], 'G2':[], 'G3':[], 'G4':[], 'G5':[], 'G6':[],
+  'G7':[], 'G8':[],
   'G9': [WP.cp3],
   'G10':[WP.cp3],
 };
@@ -1420,15 +1418,30 @@ function clearDirections(){
 }
 
 // Returns the access gate (Layer 3) nearest to the given lat/lng.
-function findNearestGate(lat,lng){
-  const cos=Math.cos(lat*Math.PI/180)*111320;
+// Find the nearest gate to a destination that is actually REACHABLE from the
+// given origin without crossing the circuit. Gate accessibility depends on which
+// side of the circuit the origin is on:
+//   LARVOTTO / MONTE_CARLO  → only G9–G10 (approach via Beausoleil cp3→cp4)
+//   MONEGHETTI              → G7–G10 (station approach or Beausoleil)
+//   FONTVIEILLE / ROCHER    → G1–G6 (harbor/south side, Place d'Armes approach)
+//   LA_CONDAMINE            → all gates (central zone, either direction)
+function findNearestGate(oLat,oLng,dLat,dLng){
+  const oz=classifyZone(oLat,oLng);
+  let allowed;
+  if(oz==='LARVOTTO'||oz==='MONTE_CARLO')        allowed=new Set(['G9','G10']);
+  else if(oz==='MONEGHETTI')                     allowed=new Set(['G7','G8','G9','G10']);
+  else if(oz==='FONTVIEILLE'||oz==='ROCHER')     allowed=new Set(['G1','G2','G3','G4','G5','G6']);
+  else                                            allowed=null; // LA_CONDAMINE: all gates
+  const cos=Math.cos(dLat*Math.PI/180)*111320;
   let nearest=null, minDist=Infinity;
-  POINT_FEATURES.filter(f=>f.layerNum===3).forEach(gate=>{
-    const [gLng,gLat]=gate.coords;
-    const d=Math.hypot((gLat-lat)*111320,(gLng-lng)*cos);
-    if(d<minDist){minDist=d;nearest=gate;}
-  });
-  return nearest;
+  POINT_FEATURES
+    .filter(f=>f.layerNum===3&&(!allowed||allowed.has(f.label)))
+    .forEach(gate=>{
+      const[gLng,gLat]=gate.coords;
+      const d=Math.hypot((gLat-dLat)*111320,(gLng-dLng)*cos);
+      if(d<minDist){minDist=d;nearest=gate;}
+    });
+  return nearest||POINT_FEATURES.find(f=>f.layerNum===3); // fallback
 }
 
 // For users with credentials: find the nearest access gate to their destination,
@@ -1443,7 +1456,7 @@ function requestDirectionsWithCredentials(){
   const oLL=btn._oLL, dLL=btn._dLL;
   if(!oLL||!dLL) return;
 
-  const gate=findNearestGate(dLL.lat(),dLL.lng());
+  const gate=findNearestGate(oLL.lat(),oLL.lng(),dLL.lat(),dLL.lng());
   if(!gate) return;
 
   _routeGen++; // cancel any still-running _routeAttempt retries
