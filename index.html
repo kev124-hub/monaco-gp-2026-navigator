@@ -826,6 +826,7 @@ function getDetour(oLat,oLng,dLat,dLng){
 let map, directionsService, directionsRenderer, placesService;
 let originAC, destAC, originPlace=null, destPlace=null;
 let lastRouteResult=null, circuitPolyline=null, _circuitCoords=null;
+let _originFromGPS=false; // true only when origin was set via the GPS button or off-route recalc
 let sidebarOpen=false, currentTheme='light';
 let simulateRaceClosed=false;
 const vis=Object.fromEntries(Object.entries(LAYERS).map(([k,v])=>[+k,v.visible]));
@@ -1031,6 +1032,7 @@ function setDirPoint(type,name,lat,lng){
   if(type==='origin'){
     document.getElementById('origin-input').value=name;
     originPlace={geometry:{location:latLng},name};
+    _originFromGPS=false;
   } else {
     document.getElementById('dest-input').value=name;
     destPlace={geometry:{location:latLng},name};
@@ -1052,7 +1054,7 @@ function initDirections(){
   const opts={bounds,strictBounds:false};
   originAC=new google.maps.places.Autocomplete(document.getElementById('origin-input'),opts);
   destAC  =new google.maps.places.Autocomplete(document.getElementById('dest-input'),  opts);
-  originAC.addListener('place_changed',()=>{originPlace=originAC.getPlace();});
+  originAC.addListener('place_changed',()=>{originPlace=originAC.getPlace();_originFromGPS=false;});
   destAC.addListener('place_changed',  ()=>{destPlace  =destAC.getPlace();});
   loadCircuitRoute();
 }
@@ -1414,7 +1416,7 @@ function clearDirections(){
   document.getElementById('credentialsOverride').style.display='none';
   document.getElementById('origin-input').value='';
   document.getElementById('dest-input').value='';
-  originPlace=null; destPlace=null; lastRouteResult=null;
+  originPlace=null; destPlace=null; lastRouteResult=null; _originFromGPS=false;
 }
 
 // Returns the access gate (Layer 3) nearest to the given lat/lng.
@@ -1490,7 +1492,10 @@ function requestDirectionsWithCredentials(){
 // the route polyline for 2 consecutive fixes, recalculates from current position.
 // Conditions at Monaco can change without notice — this keeps the route current.
 function startOffRouteWatch(){
-  if(!navigator.geolocation) return;
+  // Only watch when the origin was explicitly set via GPS. If the user typed a
+  // hotel or tapped a marker as their starting point, their actual GPS position
+  // is irrelevant — off-route detection would immediately override their chosen origin.
+  if(!navigator.geolocation||!_originFromGPS) return;
   stopOffRouteWatch();
   _offRouteCount=0;
   _watchId=navigator.geolocation.watchPosition(
@@ -1524,6 +1529,7 @@ function checkOffRoute(pos){
         const name=(status==='OK'&&results[0])?results[0].formatted_address:`${lat.toFixed(5)}, ${lng.toFixed(5)}`;
         document.getElementById('origin-input').value=name;
         originPlace={geometry:{location:curLatLng},name};
+        _originFromGPS=true; // still GPS-sourced; keep watch active after recalc
         showBanner('warning','📍 Off route — recalculating from your current position…');
         requestDirections();
       });
@@ -1600,6 +1606,7 @@ function setFeatureAsOrigin(){
   const name=_lastInfoName||'Selected Location';
   document.getElementById('origin-input').value=name;
   originPlace={geometry:{location:_lastInfoLatLng},name};
+  _originFromGPS=false;
   if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
   if(destPlace?.geometry) requestDirections();
 }
@@ -1714,6 +1721,7 @@ function useMyLocation(){
         const name=(status==='OK'&&results[0])?results[0].formatted_address:`${lat.toFixed(5)}, ${lng.toFixed(5)}`;
         document.getElementById('origin-input').value=name;
         originPlace={geometry:{location:new google.maps.LatLng(lat,lng)},name};
+        _originFromGPS=true; // enable off-route recalculation for GPS-sourced origins
         if(destPlace?.geometry) requestDirections();
       });
     },
