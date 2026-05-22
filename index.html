@@ -1452,58 +1452,92 @@ function findNearestGate(oLat,oLng,dLat,dLng){
 }
 
 // For users with credentials: find the nearest access gate to their destination,
-// then route to that gate's PUBLIC APPROACH WAYPOINT using pre-defined safe
-// via-points. Circuit crossing detection is intentionally bypassed here because:
-//  (a) approach WPs are known public locations, not inside the closed zone
-//  (b) the zone-pair system cannot reliably route to WPs that are also zone
-//      boundary points (the WP ends up filtered as co-located with destination)
-//  (c) GATE_APPROACH_VIA handles the directional safety instead
+// Credential routing dispatcher.
+//
+// BEAU RIVAGE SECTION (dest within 600m of VIP, lat < 43.741, lng > 7.426):
+//   ALL origins — no exceptions — route via the VIP access point as a stopover,
+//   then continue to the actual building on Av. d'Ostende.
+//   Approach path: origin → [Beausoleil via cp3/cp4 for east origins] → VIP
+//   checkpoint (stopover, present credential here) → Av. d'Ostende → building.
+//
+// ALL OTHER CIRCUIT-ZONE DESTINATIONS:
+//   Find the nearest accessible gate (origin-zone-aware), route to its approach WP.
 function requestDirectionsWithCredentials(){
   const btn=document.getElementById('credentialsOverride');
   const oLL=btn._oLL, dLL=btn._dLL;
   if(!oLL||!dLL) return;
 
-  const gate=findNearestGate(oLL.lat(),oLL.lng(),dLL.lat(),dLL.lng());
-  if(!gate) return;
-
   _routeGen++; // cancel any still-running _routeAttempt retries
 
-  const wp=GATE_APPROACH_WP[gate.label]||WP.station;
-  const via=GATE_APPROACH_VIA[gate.label]||[];
-  const approachLatLng=new google.maps.LatLng(wp.lat,wp.lng);
+  // ── Beau Rivage section detection ──────────────────────────────────────────
+  const _dc=Math.cos(dLL.lat()*Math.PI/180)*111320;
+  const _dvip=Math.hypot((dLL.lat()-WP.avOstende.lat)*111320,(dLL.lng()-WP.avOstende.lng)*_dc);
+  const isBeauRivage=_dvip<600 && dLL.lat()<43.741 && dLL.lng()>7.426;
+
+  let routeDest, waypoints, bannerText;
+
+  if(isBeauRivage){
+    // ── Beau Rivage: origin → [approach] → VIP (stopover) → building ─────────
+    // East/north origins (Larvotto/MonteCarlo): approach via Beausoleil cp3→cp4
+    // so the descent to VIP follows Av. de la Costa (the approved access path).
+    // West origins (Moneghetti/La Condamine/etc.): route directly to VIP.
+    const oz=classifyZone(oLL.lat(),oLL.lng());
+    const approachWPs=(oz==='LARVOTTO'||oz==='MONTE_CARLO')?[WP.cp3,WP.cp4]:[];
+    waypoints=[
+      ...approachWPs.map(w=>({location:new google.maps.LatLng(w.lat,w.lng),stopover:false})),
+      {location:new google.maps.LatLng(WP.avOstende.lat,WP.avOstende.lng),stopover:true},
+    ];
+    routeDest=dLL; // continue past VIP checkpoint to the actual building
+    // Keep original dest-input; only update destPlace for off-route recalc
+    // (destPlace already set from the user's original search)
+    bannerText=`🎫 Credential route · Present pass at VIP marker on Av. d'Ostende · then continue to your destination`;
+  } else {
+    // ── Other circuit destinations: route to nearest accessible gate ──────────
+    const gate=findNearestGate(oLL.lat(),oLL.lng(),dLL.lat(),dLL.lng());
+    if(!gate) return;
+    const wp=GATE_APPROACH_WP[gate.label]||WP.station;
+    const via=GATE_APPROACH_VIA[gate.label]||[];
+    waypoints=via.map(w=>({location:new google.maps.LatLng(w.lat,w.lng),stopover:false}));
+    routeDest=new google.maps.LatLng(wp.lat,wp.lng);
+    document.getElementById('dest-input').value=gate.name;
+    destPlace={geometry:{location:routeDest},name:gate.name};
+    bannerText=`🎫 Routed to ${gate.name} · Present your credential at the gate entrance`;
+  }
 
   btn.style.display='none';
-  showBanner('warning',`🔄 Finding route to ${gate.name}…`);
-
-  document.getElementById('dest-input').value=gate.name;
-  destPlace={geometry:{location:approachLatLng},name:gate.name};
+  showBanner('warning',`🔄 Calculating credential route…`);
 
   directionsService.route({
-    origin:oLL, destination:approachLatLng,
+    origin:oLL, destination:routeDest,
     travelMode:google.maps.TravelMode.WALKING,
-    waypoints:via.map(w=>({location:new google.maps.LatLng(w.lat,w.lng),stopover:false})),
-    optimizeWaypoints:false,
+    waypoints, optimizeWaypoints:false,
   },(result,status)=>{
     if(status!=='OK'){
-      showBanner('warning',`⚠️ Could not calculate route to ${gate.name} (${status}).`);
+      showBanner('warning',`⚠️ Could not calculate credential route (${status}).`);
       return;
     }
     directionsRenderer.setDirections(result);
     lastRouteResult=result;
     startOffRouteWatch();
-    const leg=result.routes[0].legs[0];
-    document.getElementById('dirDuration').textContent=leg.duration.text;
-    document.getElementById('dirDistance').textContent=leg.distance.text;
+
+    // Multi-leg route (VIP stopover splits legs) — sum duration and distance
+    const legs=result.routes[0].legs;
+    const totSec=legs.reduce((s,l)=>s+l.duration.value,0);
+    const totM  =legs.reduce((s,l)=>s+l.distance.value,0);
+    const durTxt=totSec<3600?Math.round(totSec/60)+' mins':(totSec/3600).toFixed(1)+' hrs';
+    const disTxt=totM>=1000?(totM/1000).toFixed(1)+' km':totM+'m';
+    document.getElementById('dirDuration').textContent=durTxt;
+    document.getElementById('dirDistance').textContent=disTxt;
     document.getElementById('dirSummary').style.display='block';
     document.getElementById('clearBtn').style.display='block';
     document.getElementById('dirSaveBtn').style.display='flex';
-    document.getElementById('dirSteps').innerHTML=leg.steps.map((s,i)=>`
+    document.getElementById('dirSteps').innerHTML=legs.flatMap(l=>l.steps).map((s,i)=>`
       <div class="dir-step">
         <div class="dir-step-num">${i+1}</div>
         <div class="dir-step-text">${s.instructions.replace(/<[^>]+>/g,' ').trim()}</div>
         <div class="dir-step-dist">${s.distance.text}</div>
       </div>`).join('');
-    showBanner('warning',`🎫 Routed to ${gate.name} · Present your credential at the gate entrance`);
+    showBanner('warning',bannerText);
     if(window.innerWidth<=768&&!sidebarOpen) toggleSidebar();
   });
 }
