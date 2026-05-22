@@ -738,6 +738,7 @@ const WP = {
   moulinsLift:   {lat:43.7415,lng:7.4265}, // upper Bd des Moulins plateau (above circuit closure)
   lazareSauvaigo:{lat:43.7363,lng:7.4195}, // Allée Lazare Sauvaigo — approved corridor west of circuit
   cp4:           {lat:43.7420,lng:7.4288}, // CP-4 Beausoleil central border — staging for G9/G10 approach
+  acadDanse:     {lat:43.7395,lng:7.4250}, // upper Av. de la Costa (addr ~30) — north entry point before descent past Académie de Danse Princesse Grace
   avOstende:     {lat:43.73838,lng:7.42430}, // Beau Rivage VIP credential check — Av. d'Ostende
 };
 // Public approach waypoints for each gate — the last circuit-safe staging point
@@ -1457,12 +1458,14 @@ function findNearestGate(oLat,oLng,dLat,dLng){
 // Av. d'Ostende as a mandatory stopover, then continue to the actual building.
 //
 // Approach to VIP:
-//   LARVOTTO / MONTE_CARLO — via Beausoleil (cp3→cp4) so the descent follows
-//     Av. de la Costa past Académie de Danse Princesse Grace to Av. d'Ostende.
+//   LARVOTTO / MONTE_CARLO — Av. Princesse Grace → public lift (moulinsLift,
+//     near Le 21 Princesse Grace) → Bd des Moulins → Av. de la Costa (cp4) →
+//     past Académie de Danse Princesse Grace → Av. d'Ostende (VIP checkpoint).
+//     Keeps the user entirely off the circuit and out of exclusion zones.
 //   All other origins — route directly to VIP from the accessible west side.
 //
 // The original destination is NEVER replaced — the route always ends at the
-// user's actual building.
+// user's actual building on Av. d'Ostende.
 function requestDirectionsWithCredentials(){
   const btn=document.getElementById('credentialsOverride');
   const oLL=btn._oLL, dLL=btn._dLL;
@@ -1471,7 +1474,7 @@ function requestDirectionsWithCredentials(){
   _routeGen++; // cancel any still-running _routeAttempt retries
 
   const oz=classifyZone(oLL.lat(),oLL.lng());
-  const approachWPs=(oz==='LARVOTTO'||oz==='MONTE_CARLO')?[WP.cp3,WP.cp4]:[];
+  const approachWPs=(oz==='LARVOTTO'||oz==='MONTE_CARLO')?[WP.moulinsLift,WP.acadDanse]:[];
   const waypoints=[
     ...approachWPs.map(w=>({location:new google.maps.LatLng(w.lat,w.lng),stopover:false})),
     {location:new google.maps.LatLng(WP.avOstende.lat,WP.avOstende.lng),stopover:true},
